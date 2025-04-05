@@ -5,23 +5,20 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['lucide-react'],
+    include: ['lucide-react'],
   },
   server: {
     headers: {
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
       'Service-Worker-Allowed': '/',
     },
-    port: 3002,
-    strictPort: false,
+    port: 3003,
+    strictPort: true,
     hmr: {
       protocol: 'ws',
       host: 'localhost',
-      port: 3002,
-      clientPort: 3002,
-      overlay: false,
-      timeout: 30000,
+      overlay: true,
     },
     watch: {
       usePolling: true,
@@ -32,6 +29,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+          icons: ['lucide-react'],
         },
       },
     },

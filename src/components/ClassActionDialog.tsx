@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useNavigate } from 'react-router-dom';
 
 interface ClassActionDialogProps {
   isOpen: boolean;
@@ -9,19 +10,110 @@ interface ClassActionDialogProps {
 
 export default function ClassActionDialog({ isOpen, onClose, type }: ClassActionDialogProps) {
   const user = useAuthStore((state) => state.user);
+  const navigate = useNavigate();
   const [classCode, setClassCode] = useState('');
   const [className, setClassName] = useState('');
   const [section, setSection] = useState('');
   const [subject, setSubject] = useState('');
   const [room, setRoom] = useState('');
+  const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(true);
+  const [acceptedWorkspaceTerms, setAcceptedWorkspaceTerms] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name === 'name') {
+      setClassName(value);
+    } else if (name === 'section') {
+      setSection(value);
+    } else if (name === 'subject') {
+      setSubject(value);
+    } else if (name === 'room') {
+      setRoom(value);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement join/create logic
+    if (type === 'create') {
+      // Generate a random class code (similar to Google Classroom's format)
+      const classCode = Math.random().toString(36).substring(2, 10);
+      
+      // Here you would typically make an API call to create the class
+      // For now, we'll just navigate to the new class page
+      navigate(`/class/${classCode}`, { 
+        state: { 
+          name: className,
+          section,
+          subject,
+          room,
+          classCode,
+          isNewClass: true 
+        } 
+      });
+    }
     onClose();
   };
+
+  if (showWorkspaceDialog) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg w-full max-w-[450px] overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[22px] font-normal text-[#3c4043]">Using Classroom at a school with students?</h2>
+          </div>
+          <div className="p-6">
+            <p className="text-[#3c4043] mb-4">
+              If so, your school must sign up for a{' '}
+              <a href="#" className="text-[#1a73e8] hover:underline">
+                Google Workspace for Education
+              </a>{' '}
+              account before you can use Classroom.{' '}
+              <a href="#" className="text-[#1a73e8] hover:underline">
+                Learn More
+              </a>
+            </p>
+            <p className="text-[#3c4043] mb-6">
+              Google Workspace for Education lets schools decide which Google services their students can use, and provides additional{' '}
+              <a href="#" className="text-[#1a73e8] hover:underline">
+                privacy and security
+              </a>{' '}
+              protections that are important in a school setting. Students cannot use Google Classroom at a school with personal accounts.
+            </p>
+            <div className="bg-[#f8f9fa] p-4 rounded-lg mb-6">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={acceptedWorkspaceTerms}
+                  onChange={(e) => setAcceptedWorkspaceTerms(e.target.checked)}
+                />
+                <span className="text-sm text-[#3c4043]">
+                  I've read and understand the above notice, and I'm not using Classroom at a school with students
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={onClose}
+                className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
+              >
+                Go back
+              </button>
+              <button
+                onClick={() => setShowWorkspaceDialog(false)}
+                disabled={!acceptedWorkspaceTerms}
+                className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -90,56 +182,60 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
               <h2 className="text-[22px] font-normal text-[#3c4043]">Create class</h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div>
                   <input
                     type="text"
-                    placeholder="Class name (required)"
+                    name="name"
                     value={className}
-                    onChange={(e) => setClassName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
+                    onChange={handleInputChange}
+                    placeholder="Class name (required)"
+                    className="w-full px-3 py-2 border-b border-gray-300 focus:border-[#1a73e8] focus:outline-none text-[#3c4043]"
                     required
                   />
                 </div>
                 <div>
                   <input
                     type="text"
-                    placeholder="Section"
+                    name="section"
                     value={section}
-                    onChange={(e) => setSection(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
+                    onChange={handleInputChange}
+                    placeholder="Section"
+                    className="w-full px-3 py-2 border-b border-gray-300 focus:border-[#1a73e8] focus:outline-none text-[#3c4043]"
                   />
                 </div>
                 <div>
                   <input
                     type="text"
-                    placeholder="Subject"
+                    name="subject"
                     value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
+                    onChange={handleInputChange}
+                    placeholder="Subject"
+                    className="w-full px-3 py-2 border-b border-gray-300 focus:border-[#1a73e8] focus:outline-none text-[#3c4043]"
                   />
                 </div>
                 <div>
                   <input
                     type="text"
-                    placeholder="Room"
+                    name="room"
                     value={room}
-                    onChange={(e) => setRoom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
+                    onChange={handleInputChange}
+                    placeholder="Room"
+                    className="w-full px-3 py-2 border-b border-gray-300 focus:border-[#1a73e8] focus:outline-none text-[#3c4043]"
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2 mt-6">
+              <div className="flex justify-end gap-3 mt-6">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2 text-[#1a73e8] font-medium hover:bg-[#f6fafe] rounded"
+                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-[#1a73e8] text-white font-medium rounded hover:bg-[#1557b0] disabled:opacity-50 disabled:hover:bg-[#1a73e8]"
+                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!className}
                 >
                   Create

@@ -7,6 +7,7 @@ import SettingsPage from '../pages/SettingsPage';
 import EnrolledPage from '../pages/EnrolledPage';
 import ToReviewPage from '../pages/ToReviewPage';
 import CalendarPage from '../pages/CalendarPage';
+import ClassPage from '../pages/ClassPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export const router = createBrowserRouter([
@@ -21,6 +22,11 @@ export const router = createBrowserRouter([
       { path: 'archived', element: <ArchivedPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'to-review', element: <ToReviewPage /> },
+      { path: 'class/:classId', element: <ClassPage /> },
+      { path: 'class/:classId/stream', element: <ClassPage /> },
+      { path: 'class/:classId/classwork', element: <ClassPage /> },
+      { path: 'class/:classId/people', element: <ClassPage /> },
+      { path: 'class/:classId/grades', element: <ClassPage /> },
     ],
   },
 ]);
