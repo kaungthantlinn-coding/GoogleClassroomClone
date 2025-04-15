@@ -13,6 +13,8 @@ export interface ClassData {
   subject?: string;
   room?: string;
   isNewClass?: boolean;
+  color?: string;
+  coverImage?: string;
 }
 
 // Create a context for class data
@@ -105,8 +107,8 @@ export default function ClassPage() {
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState({
-    color: '#1a73e8',
-    image: 'https://www.gstatic.com/classroom/themes/img_code.jpg'
+    color: classData.color || '#1a73e8',
+    image: classData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
   });
 
   // Get current path to determine active tab
@@ -118,7 +120,28 @@ export default function ClassPage() {
 
   const handleThemeChange = (newTheme: { color: string; image: string }) => {
     setTheme(newTheme);
+    // Save theme to localStorage and update classData
+    if (classId) {
+      const updatedData = { ...classData, color: newTheme.color, coverImage: newTheme.image };
+      setClassData(updatedData);
+      localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
+    }
   };
+
+  // Load theme from localStorage when component mounts
+  useEffect(() => {
+    if (classId) {
+      const savedData = localStorage.getItem(`classData-${classId}`);
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        setTheme({
+          color: parsedData.color || '#1a73e8',
+          image: parsedData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
+        });
+        setClassData(parsedData);
+      }
+    }
+  }, [classId]);
 
   const isActive = (path: string) => {
     return location.pathname.includes(path) ? 'text-[#1967d2] border-b-2 border-[#1967d2]' : 'text-[#444746] hover:bg-[#f8f9fa]';
@@ -207,8 +230,12 @@ export default function ClassPage() {
               <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
               <img 
                 src={theme.image}
-                alt=""
-                className="w-full h-full object-cover opacity-40"
+                alt="Class banner"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  img.src = 'https://source.unsplash.com/random/1600x900/?education,classroom';
+                }}
               />
             </div>
           </div>

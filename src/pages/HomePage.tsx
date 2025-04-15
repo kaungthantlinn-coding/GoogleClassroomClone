@@ -6,6 +6,22 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useState, useEffect } from 'react';
 import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
 
+const getRandomUnsplashImage = (className: string) => {
+  const timestamp = Date.now();
+  let query = 'education,classroom';
+  
+  // Add specific themes based on class name
+  if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
+    query = 'ui,design';
+  } else if (className.toLowerCase().includes('fullstack')) {
+    query = 'coding,programming';
+  } else if (className.toLowerCase().includes('riso')) {
+    query = 'technology,computer';
+  }
+  
+  return `https://source.unsplash.com/random/800x600?${query}&t=${timestamp}`;
+};
+
 export default function HomePage() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -14,25 +30,6 @@ export default function HomePage() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  
-  // Test function to show edit form directly
-  const testShowEditForm = () => {
-    // Create a simple test course
-    const testCourse = {
-      id: `test-${Date.now()}`, // Use a timestamp to ensure uniqueness
-      name: 'Test Course',
-      section: 'Test Section',
-      teacherName: 'Test Teacher',
-      enrollmentCode: `test-${Date.now()}`,
-      color: '#1a73e8',
-      textColor: 'white',
-      subject: 'Test Subject',
-      room: 'Test Room'
-    };
-    
-    setEditingCourse(testCourse);
-    setShowEditForm(true);
-  };
   
   // Function to clear all created classes
   const clearCreatedClasses = () => {
@@ -144,9 +141,9 @@ export default function HomePage() {
           name: 'UI/UX',
           section: 'Batch 1',
           teacherName: 'John Doe',
-          coverImage: '',
+          coverImage: 'https://source.unsplash.com/random/1600x900/?ui,design',
           enrollmentCode: 'abc123',
-          color: '#3c4043', // dark gray background
+          color: '#3c4043',
           textColor: 'white'
         },
         {
@@ -154,9 +151,9 @@ export default function HomePage() {
           name: 'FullStack',
           section: 'Batch 2',
           teacherName: 'Jane Smith',
-          coverImage: '',
+          coverImage: 'https://source.unsplash.com/random/1600x900/?coding,programming',
           enrollmentCode: 'def456',
-          color: '#f8836b', // coral/orange background
+          color: '#f8836b',
           textColor: 'white'
         },
         {
@@ -164,9 +161,9 @@ export default function HomePage() {
           name: 'RISO',
           section: 'Batch-2',
           teacherName: 'San Mie Htay',
-          coverImage: '',
+          coverImage: 'https://source.unsplash.com/random/1600x900/?technology,computer',
           enrollmentCode: 'ghi789',
-          color: '#ff8a65', // light orange background
+          color: '#ff8a65',
           textColor: 'white'
         }
       ];
@@ -249,13 +246,63 @@ export default function HomePage() {
     return name && name.trim() ? name.trim().charAt(0).toUpperCase() : '?';
   };
 
+  const renderClassCard = (classData: Course) => {
+    // Get the saved theme data from localStorage
+    const savedData = localStorage.getItem(`classData-${classData.id}`);
+    const themeData = savedData ? JSON.parse(savedData) : null;
+    
+    // Use the saved theme data if available, otherwise fallback to default values
+    const cardColor = themeData?.color || classData.color || '#1a73e8';
+    const cardImage = themeData?.coverImage || classData.coverImage || getRandomUnsplashImage(classData.name);
+    
+    return (
+      <Link
+        to={`/class/${classData.id}`}
+        state={{
+          className: classData.name,
+          section: classData.section,
+          classCode: classData.enrollmentCode,
+          color: cardColor,
+          coverImage: cardImage
+        }}
+        key={classData.id}
+        className="block rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300"
+      >
+        <div
+          className="h-32 bg-cover bg-center relative"
+          style={{
+            backgroundColor: cardColor
+          }}
+        >
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
+            <img 
+              src={cardImage}
+              alt={`${classData.name} banner`}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const img = e.target as HTMLImageElement;
+                img.src = getRandomUnsplashImage(classData.name);
+              }}
+            />
+          </div>
+          <div className="relative z-10 p-6 h-full flex flex-col justify-between">
+            <div>
+              <h3 className="text-xl font-bold text-white mb-1">{classData.name}</h3>
+              <p className="text-white text-opacity-90">{classData.section}</p>
+            </div>
+            {classData.teacherName && (
+              <p className="text-white text-opacity-80">{classData.teacherName}</p>
+            )}
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
   return (
     <>
-      {/* Debug information - to check state */}
-      <div className="fixed top-0 left-0 bg-black text-white p-2 z-[10000]">
-        Show Edit Form: {showEditForm ? 'true' : 'false'}, 
-        Editing Course: {editingCourse ? 'set' : 'null'}
-      </div>
+
       
       {/* Edit Form Modal - Moved to root level */}
       {showEditForm && editingCourse && (
@@ -371,14 +418,6 @@ export default function HomePage() {
               <Trash2 size={16} />
               <span>Clear created classes</span>
             </button>
-            
-            <button
-              onClick={testShowEditForm}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-            >
-              <Edit size={16} />
-              <span>Test Edit Form</span>
-            </button>
           </div>
         </div>
         
@@ -390,34 +429,7 @@ export default function HomePage() {
               style={{ maxWidth: '300px' }}
             >
               <div className="relative">
-                <Link 
-                  to={`/class/${course.id}`} 
-                  state={{ 
-                    className: course.name, 
-                    section: course.section 
-                  }}
-                  className="block"
-                >
-                  <div
-                    className="h-[100px] p-4 relative"
-                    style={{
-                      backgroundColor: course.color || '#1a73e8',
-                    }}
-                  >                  
-                    {/* Class info */}
-                    <div className="relative z-10">
-                      <h3 className={`text-xl font-medium leading-tight ${course.textColor === 'white' ? 'text-white' : 'text-[#3c4043]'}`}>
-                        {course.name}
-                      </h3>
-                      <p className={`text-sm leading-tight mt-1 ${course.textColor === 'white' ? 'text-white/90' : 'text-[#5f6368]'}`}>
-                        {course.section}
-                      </p>
-                      <p className={`text-sm leading-tight mt-0.5 ${course.textColor === 'white' ? 'text-white/90' : 'text-[#5f6368]'}`}>
-                        {course.teacherName}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
+                {renderClassCard(course)}
                 
                 {/* Quick Edit and Archive buttons */}
                 <div className="absolute top-3 right-3 flex space-x-1">

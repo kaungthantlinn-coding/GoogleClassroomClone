@@ -45,39 +45,48 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
         return;
       }
       
-      // Generate a class code in Google Classroom format (7 characters, mix of lowercase letters and numbers)
-      const characters = 'abcdefghijkmnpqrstuvwxyz23456789'; // Avoiding confusing characters like 0, o, 1, l
+      // Generate a class code
       let classCode = '';
+      const characters = 'abcdefghijkmnpqrstuvwxyz23456789';
       for (let i = 0; i < 7; i++) {
         classCode += characters.charAt(Math.floor(Math.random() * characters.length));
       }
+
+      // Random theme colors
+      const colors = ['#1a73e8', '#1e8e3e', '#d93025', '#4285f4', '#f8836b', '#ff8a65', '#3c4043'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+      // Random education-related keywords for Unsplash
+      const keywords = [
+        'education',
+        'classroom',
+        'learning',
+        'study',
+        'school',
+        'university',
+        'library',
+        'books',
+        'technology',
+        'computer'
+      ];
       
-      // Get color based on className
-      let color = '#1a73e8';
-      let textColor = 'white';
+      // Get two random keywords
+      const randomKeyword1 = keywords[Math.floor(Math.random() * keywords.length)];
+      const randomKeyword2 = keywords[Math.floor(Math.random() * keywords.length)];
       
-      if (className.toLowerCase().includes('ui/ux')) {
-        color = '#3c4043';
-      } else if (className.toLowerCase().includes('fullstack')) {
-        color = '#f8836b';
-      } else if (className.toLowerCase().includes('riso')) {
-        color = '#ff8a65';
-      } else {
-        // Generate a random color if not a predefined class
-        const colors = ['#1a73e8', '#00887a', '#8430ce', '#ea4335', '#fbbc04', '#4285f4', '#673ab7', '#f50057'];
-        color = colors[Math.floor(Math.random() * colors.length)];
-      }
+      // Create random Unsplash URL with timestamp to prevent caching
+      const randomImage = `https://source.unsplash.com/random/1600x900/?${randomKeyword1},${randomKeyword2}&t=${Date.now()}`;
       
-      // Create class data object - ensure all required fields match the Course type
+      // Create class data object
       const classData = { 
         id: classCode,
         name: className.trim(),
         section: section.trim() || "Batch 1",
         teacherName: user?.name || 'You',
-        coverImage: '',
+        coverImage: randomImage,
         enrollmentCode: classCode,
-        color,
-        textColor,
+        color: randomColor,
+        textColor: 'white',
         subject: subject.trim(),
         room: room.trim()
       };

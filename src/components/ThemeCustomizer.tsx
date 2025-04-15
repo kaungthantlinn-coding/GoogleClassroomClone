@@ -33,134 +33,134 @@ const themeCategories = [
 const defaultThemeImages = {
   'general': [
     {
-      id: 'breakfast',
-      url: 'https://gstatic.com/classroom/themes/img_breakfast.jpg',
-      color: '#FB8C00'
+      id: 'general_1',
+      url: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'code',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#1A73E8'
+      id: 'general_2',
+      url: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'bookclub',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#1967D2'
+      id: 'general_3',
+      url: 'https://images.unsplash.com/photo-1606761568499-6d2451b23c66?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'graduation',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#1E8E3E'
+      id: 'general_4',
+      url: 'https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ],
   'english-history': [
     {
-      id: 'graduation',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#D93025'
+      id: 'english_1',
+      url: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'bookclub',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#1967D2'
+      id: 'english_2',
+      url: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'reachout',
-      url: 'https://gstatic.com/classroom/themes/img_reachout.jpg',
-      color: '#1E8E3E'
+      id: 'english_3',
+      url: 'https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'devices',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#1967D2'
+      id: 'english_4',
+      url: 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ],
   'math-science': [
     {
-      id: 'math',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#1E8E3E'
+      id: 'math_1',
+      url: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'code',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#1967D2'
+      id: 'math_2',
+      url: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'graduation',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#D93025'
+      id: 'math_3',
+      url: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'science',
-      url: 'https://gstatic.com/classroom/themes/img_reachout.jpg',
-      color: '#1E8E3E'
+      id: 'math_4',
+      url: 'https://images.unsplash.com/photo-1453733190371-0a9bedd82893?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ],
   'arts': [
     {
-      id: 'guitar',
-      url: 'https://gstatic.com/classroom/themes/img_concert.jpg',
-      color: '#D93025'
+      id: 'arts_1',
+      url: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'concert',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#1967D2'
+      id: 'arts_2',
+      url: 'https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'performing_arts',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#1E8E3E'
+      id: 'arts_3',
+      url: 'https://images.unsplash.com/photo-1547826039-bfc35e0f1ea8?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'design',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#129EAF'
+      id: 'arts_4',
+      url: 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ],
   'sports': [
     {
-      id: 'sports',
-      url: 'https://gstatic.com/classroom/themes/img_reachout.jpg',
-      color: '#1E8E3E'
+      id: 'sports_1',
+      url: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'tennis',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#1967D2'
+      id: 'sports_2',
+      url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'soccer',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#FB8C00'
+      id: 'sports_3',
+      url: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'basketball',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#D93025'
+      id: 'sports_4',
+      url: 'https://images.unsplash.com/photo-1576858574144-9ae1ebcf5ae5?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ],
   'other': [
     {
-      id: 'coffee',
-      url: 'https://gstatic.com/classroom/themes/img_code.jpg',
-      color: '#129EAF'
+      id: 'other_1',
+      url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1a73e8'
     },
     {
-      id: 'pencils',
-      url: 'https://gstatic.com/classroom/themes/img_pencils.jpg',
-      color: '#1967D2'
+      id: 'other_2',
+      url: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#1e8e3e'
     },
     {
-      id: 'backtoschool',
-      url: 'https://gstatic.com/classroom/themes/img_bookclub.jpg',
-      color: '#1E8E3E'
+      id: 'other_3',
+      url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#d93025'
     },
     {
-      id: 'breakfast',
-      url: 'https://gstatic.com/classroom/themes/img_graduation.jpg',
-      color: '#FB8C00'
+      id: 'other_4',
+      url: 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=1600&h=900&q=80',
+      color: '#4285f4'
     }
   ]
 };
@@ -171,13 +171,18 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
   const [activeCategory, setActiveCategory] = useState('general');
   const [showThemeSelector, setShowThemeSelector] = useState(false);
 
+  // Add timestamp to force image refresh
+  const getRandomImageUrl = (url: string) => {
+    return `${url}&t=${Date.now()}`;
+  };
+
   const handleSave = () => {
     onSave({ color: selectedColor, image: selectedImage });
     onClose();
   };
 
   const handleThemeSelect = (image: string, color: string) => {
-    setSelectedImage(image);
+    setSelectedImage(getRandomImageUrl(image));
     setSelectedColor(color);
     setShowThemeSelector(false);
   };
@@ -212,7 +217,7 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
               </div>
 
               {/* Theme Images Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 {defaultThemeImages[activeCategory as keyof typeof defaultThemeImages].map((theme) => (
                   <button
                     key={theme.id}
@@ -224,7 +229,7 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
                     <img 
                       src={theme.url} 
                       alt={`Theme ${theme.id}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
                     />
                     {selectedImage === theme.url && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">

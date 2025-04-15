@@ -80,9 +80,15 @@ export default function Navbar() {
                 <span className="tracking-tight">Classroom</span>
               </Link>
               <ChevronRight size={20} className="mx-1 text-[#5f6368]" />
-              <span className="text-[#5f6368] tracking-tight">{getPageTitle()}</span>
-              {isClassPage && getClassSection() && (
-                <span className="text-sm text-[#5f6368] leading-tight ml-2">{getClassSection()}</span>
+              {isClassPage ? (
+                <div className="flex flex-col">
+                  <span className="text-[#3c4043] tracking-tight leading-tight">{getPageTitle()}</span>
+                  {getClassSection() && (
+                    <span className="text-sm text-[#5f6368] leading-tight">{getClassSection()}</span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[#5f6368] tracking-tight">{getPageTitle()}</span>
               )}
             </div>
           ) : (
@@ -117,7 +123,7 @@ export default function Navbar() {
                   </button>
                 )}
               </div>
-            ) : (
+            ) : !isArchivedPage ? (
               <>
                 <button
                   onClick={handleAddClick}
@@ -143,7 +149,7 @@ export default function Navbar() {
                   </div>
                 )}
               </>
-            )}
+            ) : null}
           </div>
           <button className="p-2 hover:bg-gray-100 rounded-full" aria-label="Google apps">
             <Grid size={24} strokeWidth={1.5} className="text-[#5f6368]" />
