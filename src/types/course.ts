@@ -5,6 +5,10 @@ export interface Course {
   teacherName: string;
   coverImage?: string;
   enrollmentCode: string;
+  color?: string;
+  textColor?: string;
+  subject?: string;
+  room?: string;
 }
 
 export interface User {

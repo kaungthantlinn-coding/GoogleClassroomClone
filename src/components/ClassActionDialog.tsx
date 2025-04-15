@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ClassActionDialogProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface ClassActionDialogProps {
 export default function ClassActionDialog({ isOpen, onClose, type }: ClassActionDialogProps) {
   const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [classCode, setClassCode] = useState('');
   const [className, setClassName] = useState('');
   const [section, setSection] = useState('');
@@ -37,21 +39,60 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (type === 'create') {
-      // Generate a random class code (similar to Google Classroom's format)
-      const classCode = Math.random().toString(36).substring(2, 10);
+      // Only create class if name is provided
+      if (!className.trim()) {
+        alert("Please provide a class name");
+        return;
+      }
       
-      // Here you would typically make an API call to create the class
-      // For now, we'll just navigate to the new class page
-      navigate(`/class/${classCode}`, { 
-        state: { 
-          name: className,
-          section,
-          subject,
-          room,
-          classCode,
-          isNewClass: true 
-        } 
-      });
+      // Generate a class code in Google Classroom format (7 characters, mix of lowercase letters and numbers)
+      const characters = 'abcdefghijkmnpqrstuvwxyz23456789'; // Avoiding confusing characters like 0, o, 1, l
+      let classCode = '';
+      for (let i = 0; i < 7; i++) {
+        classCode += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+      
+      // Get color based on className
+      let color = '#1a73e8';
+      let textColor = 'white';
+      
+      if (className.toLowerCase().includes('ui/ux')) {
+        color = '#3c4043';
+      } else if (className.toLowerCase().includes('fullstack')) {
+        color = '#f8836b';
+      } else if (className.toLowerCase().includes('riso')) {
+        color = '#ff8a65';
+      } else {
+        // Generate a random color if not a predefined class
+        const colors = ['#1a73e8', '#00887a', '#8430ce', '#ea4335', '#fbbc04', '#4285f4', '#673ab7', '#f50057'];
+        color = colors[Math.floor(Math.random() * colors.length)];
+      }
+      
+      // Create class data object - ensure all required fields match the Course type
+      const classData = { 
+        id: classCode,
+        name: className.trim(),
+        section: section.trim() || "Batch 1",
+        teacherName: user?.name || 'You',
+        coverImage: '',
+        enrollmentCode: classCode,
+        color,
+        textColor,
+        subject: subject.trim(),
+        room: room.trim()
+      };
+      
+      // Save to localStorage before navigating
+      localStorage.setItem(`classData-${classCode}`, JSON.stringify(classData));
+      
+      // Invalidate courses query to trigger a refetch on HomePage
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      
+      // Navigate to the new class page
+      navigate(`/class/${classCode}`, { state: { 
+        className: classData.name, 
+        section: classData.section 
+      }});
     }
     onClose();
   };

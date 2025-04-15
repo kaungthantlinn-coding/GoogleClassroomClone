@@ -8,8 +8,6 @@ import EnrolledPage from '../pages/EnrolledPage';
 import ToReviewPage from '../pages/ToReviewPage';
 import CalendarPage from '../pages/CalendarPage';
 import ClassPage from '../pages/ClassPage';
-import PeoplePage from '../pages/PeoplePage';
-import GradesPage from '../pages/GradesPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export const router = createBrowserRouter([
@@ -27,8 +25,8 @@ export const router = createBrowserRouter([
       { path: 'class/:classId', element: <ClassPage /> },
       { path: 'class/:classId/stream', element: <ClassPage /> },
       { path: 'class/:classId/classwork', element: <ClassPage /> },
-      { path: 'class/:classId/people', element: <PeoplePage /> },
-      { path: 'class/:classId/grades', element: <GradesPage /> },
+      { path: 'class/:classId/people', element: <ClassPage /> },
+      { path: 'class/:classId/grades', element: <ClassPage /> },
     ],
   },
 ]);

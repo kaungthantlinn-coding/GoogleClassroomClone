@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, Users, Upload, Link as LinkIcon } from 'lucide-react';
 import SelectClassModal from '../components/SelectClassModal';
 import ReusePostModal from '../components/ReusePostModal';
 import AddTopicModal from '../components/AddTopicModal';
+import { ClassDataContext } from './ClassPage';
 
 const ClassworkPage = () => {
+  const classData = useContext(ClassDataContext);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [showAssignmentForm, setShowAssignmentForm] = useState(false);
   const [showQuizForm, setShowQuizForm] = useState(false);
@@ -13,13 +15,20 @@ const ClassworkPage = () => {
   const [showSelectClassModal, setShowSelectClassModal] = useState(false);
   const [showReusePostModal, setShowReusePostModal] = useState(false);
   const [showAddTopicModal, setShowAddTopicModal] = useState(false);
-  const [selectedClass, setSelectedClass] = useState('Riso Batch 3');
+  const [selectedClass, setSelectedClass] = useState(classData.className || 'Class');
   const [points, setPoints] = useState('100');
   const [dueDate, setDueDate] = useState('No due date');
   const [topic, setTopic] = useState('No topic');
   const [answerType, setAnswerType] = useState('Short answer');
   const [studentsCanReply, setStudentsCanReply] = useState(true);
   const [studentsCanEdit, setStudentsCanEdit] = useState(false);
+
+  // Update document title when class data changes
+  useEffect(() => {
+    const className = classData.className || 'Class';
+    const section = classData.section ? ` - ${classData.section}` : '';
+    document.title = `${className}${section} - Classwork - Google Classroom`;
+  }, [classData]);
 
   const closeAllForms = () => {
     setShowAssignmentForm(false);
@@ -669,25 +678,25 @@ const ClassworkPage = () => {
                   <div>
                     <h3 className="text-sm text-[#3c4043] mb-2">For</h3>
                     <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      Riso Batch 3
+                      {selectedClass}
                     </button>
                   </div>
                   <div>
                     <h3 className="text-sm text-[#3c4043] mb-2">Points</h3>
                     <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      100
+                      {points}
                     </button>
                   </div>
                   <div>
                     <h3 className="text-sm text-[#3c4043] mb-2">Due</h3>
                     <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      No due date
+                      {dueDate}
                     </button>
                   </div>
                   <div>
                     <h3 className="text-sm text-[#3c4043] mb-2">Topic</h3>
                     <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      No topic
+                      {topic}
                     </button>
                   </div>
                   <div>

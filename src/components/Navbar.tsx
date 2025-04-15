@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, Plus, Grid, Calendar } from 'lucide-react';
+import { Menu, Plus, Grid, Calendar, ChevronRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import ClassActionDialog from './ClassActionDialog';
@@ -36,6 +36,26 @@ export default function Navbar() {
   };
 
   const isCalendarPage = location.pathname === '/calendar';
+  const isClassPage = location.pathname.includes('/class/');
+  const isArchivedPage = location.pathname === '/archived';
+  
+  const getPageTitle = () => {
+    if (isCalendarPage) return 'Calendar';
+    if (isArchivedPage) return 'Archived classes';
+    if (isClassPage) {
+      const state = location.state as { className?: string };
+      return state?.className || '';
+    }
+    return '';
+  };
+  
+  const getClassSection = () => {
+    if (isClassPage) {
+      const state = location.state as { section?: string };
+      return state?.section || '';
+    }
+    return '';
+  };
 
   return (
     <nav className="bg-white border-b">
@@ -47,14 +67,34 @@ export default function Navbar() {
           >
             <Menu size={24} strokeWidth={1.5} className="text-[#5f6368]" />
           </button>
-          <Link to="/" className="flex items-center gap-2">
-            <img
-              src="https://www.gstatic.com/classroom/logo_square_48.svg"
-              alt="Google Classroom"
-              className="w-8 h-8"
-            />
-            <span className="text-[22px] text-[#3c4043] tracking-tight">Classroom</span>
-          </Link>
+          
+          {/* Conditional rendering for breadcrumb */}
+          {(isCalendarPage || isClassPage || isArchivedPage || (getPageTitle() !== '')) ? (
+            <div className="flex items-center text-[22px]">
+              <Link to="/" className="flex items-center gap-2 text-[#3c4043] hover:text-[#1a73e8]">
+                <img
+                  src="https://www.gstatic.com/classroom/logo_square_48.svg"
+                  alt="Google Classroom"
+                  className="w-8 h-8"
+                />
+                <span className="tracking-tight">Classroom</span>
+              </Link>
+              <ChevronRight size={20} className="mx-1 text-[#5f6368]" />
+              <span className="text-[#5f6368] tracking-tight">{getPageTitle()}</span>
+              {isClassPage && getClassSection() && (
+                <span className="text-sm text-[#5f6368] leading-tight ml-2">{getClassSection()}</span>
+              )}
+            </div>
+          ) : (
+            <Link to="/" className="flex items-center gap-2">
+              <img
+                src="https://www.gstatic.com/classroom/logo_square_48.svg"
+                alt="Google Classroom"
+                className="w-8 h-8"
+              />
+              <span className="text-[22px] text-[#3c4043] tracking-tight">Classroom</span>
+            </Link>
+          )}
         </div>
         
         <div className="flex items-center gap-2">

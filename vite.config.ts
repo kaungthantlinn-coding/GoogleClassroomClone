@@ -14,7 +14,7 @@ export default defineConfig({
       'Service-Worker-Allowed': '/',
     },
     port: 3003,
-    strictPort: true,
+    strictPort: false,
     hmr: {
       protocol: 'ws',
       host: 'localhost',

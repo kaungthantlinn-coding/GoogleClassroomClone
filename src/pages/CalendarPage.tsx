@@ -11,6 +11,9 @@ export default function CalendarPage() {
     if (location.state?.date) {
       setCurrentDate(new Date(location.state.date));
     }
+    
+    // Update document title
+    document.title = "Calendar - Google Classroom";
   }, [location.state?.date]);
 
   // Get the start of the week (Sunday)
