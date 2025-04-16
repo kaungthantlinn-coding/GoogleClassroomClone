@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface Class {
@@ -17,56 +17,70 @@ interface SelectClassModalProps {
 }
 
 const SelectClassModal = ({ isOpen, onClose, onSelectClass }: SelectClassModalProps) => {
-  const classes: Class[] = [
-    {
-      id: '1',
-      name: 'Riso',
-      section: 'Batch 3',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Yesterday',
-      color: '#1967d2'
-    },
-    {
-      id: '2',
-      name: 'Riso',
-      section: 'Batch 4',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Yesterday',
-      color: '#1967d2'
-    },
-    {
-      id: '3',
-      name: 'Riso',
-      section: 'Batch 3',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Yesterday',
-      color: '#1967d2'
-    },
-    {
-      id: '4',
-      name: 'Test',
-      section: 'Test',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Apr 4',
-      color: '#1967d2'
-    },
-    {
-      id: '5',
-      name: 'Test',
-      section: 'Test',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Apr 3',
-      color: '#9334ea'
-    },
-    {
-      id: '6',
-      name: 'Test',
-      section: 'Batch -2',
-      teacher: 'Kaung Kaung Thant Linn 123',
-      created: 'Apr 3',
-      color: '#1967d2'
+  const [classes, setClasses] = useState<Class[]>([]);
+  
+  useEffect(() => {
+    if (isOpen) {
+      loadClasses();
     }
-  ];
+  }, [isOpen]);
+  
+  const loadClasses = () => {
+    // Get all classes from localStorage
+    const loadedClasses: Class[] = [];
+    
+    // First check for any manually created classes in localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('classData-')) {
+        try {
+          const rawData = localStorage.getItem(key) || '';
+          const classData = JSON.parse(rawData);
+          const classId = key.replace('classData-', '');
+          
+          if (classData && classData.name && classData.name.trim() !== '' && classData.name !== 'Unnamed Class') {
+            loadedClasses.push({
+              id: classId,
+              name: classData.name,
+              section: classData.section || '',
+              teacher: classData.teacherName || 'You',
+              created: new Date().toLocaleDateString() === new Date(parseInt(classId.split('-')[1])).toLocaleDateString() 
+                ? 'Today' 
+                : 'Yesterday',
+              color: classData.color || '#4285f4'
+            });
+          }
+        } catch (e) {
+          console.error('Error loading class from localStorage', e);
+        }
+      }
+    }
+    
+    // Add default classes if no classes were found
+    if (loadedClasses.length === 0) {
+      const defaultClasses = [
+        {
+          id: '1',
+          name: 'Riso',
+          section: 'Batch 3',
+          teacher: 'Kaung Kaung Thant Linn 123',
+          created: 'Yesterday',
+          color: '#1967d2'
+        },
+        {
+          id: '2',
+          name: 'Riso',
+          section: 'Batch 4',
+          teacher: 'Kaung Kaung Thant Linn 123',
+          created: 'Yesterday',
+          color: '#1967d2'
+        }
+      ];
+      setClasses(defaultClasses);
+    } else {
+      setClasses(loadedClasses);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -103,7 +117,11 @@ const SelectClassModal = ({ isOpen, onClose, onSelectClass }: SelectClassModalPr
                   </div>
                   <div>
                     <div className="text-[14px] text-[#3c4043]">{classItem.name}</div>
-                    <div className="text-[12px] text-[#5f6368]">{classItem.section}</div>
+                    <div className="text-[12px] text-[#5f6368]">
+                      {classItem.section.toLowerCase().includes('batch') 
+                        ? `Batch-${classItem.section.replace('Batch ', '').replace('Batch-', '').replace(' ', '')}`
+                        : classItem.section}
+                    </div>
                   </div>
                 </div>
                 <div className="text-[14px] text-[#5f6368]">{classItem.teacher}</div>
@@ -117,4 +135,4 @@ const SelectClassModal = ({ isOpen, onClose, onSelectClass }: SelectClassModalPr
   );
 };
 
-export default SelectClassModal; 
+export default SelectClassModal;

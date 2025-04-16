@@ -110,6 +110,9 @@ export default function HomePage() {
     // Save to localStorage
     localStorage.setItem(`classData-${courseToSave.id}`, JSON.stringify(courseToSave));
     
+    // Trigger a storage event for the sidebar to detect
+    window.dispatchEvent(new Event('storage'));
+    
     // Refresh courses list
     queryClient.invalidateQueries({ queryKey: ['courses'] });
     

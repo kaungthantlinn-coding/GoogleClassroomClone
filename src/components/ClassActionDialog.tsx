@@ -94,6 +94,27 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
       // Save to localStorage before navigating
       localStorage.setItem(`classData-${classCode}`, JSON.stringify(classData));
       
+      // Dispatch custom event to update sidebar immediately
+      const newClassObj = {
+        id: classCode,
+        name: className.trim(),
+        section: section.trim() || "Batch 1",
+        color: randomColor
+      };
+      
+      // Create and dispatch a custom event to update the sidebar
+      // Using a more specific event name to avoid conflicts
+      const classCreatedEvent = new CustomEvent('class-created', { 
+        detail: { action: 'addClass', class: newClassObj } 
+      });
+      window.dispatchEvent(classCreatedEvent);
+      
+      // Also dispatch the storage event for backward compatibility
+      const storageEvent = new CustomEvent('storage', { 
+        detail: { action: 'addClass', class: newClassObj } 
+      });
+      window.dispatchEvent(storageEvent);
+      
       // Invalidate courses query to trigger a refetch on HomePage
       queryClient.invalidateQueries({ queryKey: ['courses'] });
       
