@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
@@ -6,6 +6,10 @@ import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { router } from './routes';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import { setupErrorHandlers } from './utils/errorHandling';
+
+// Set up global error handlers before rendering the app
+setupErrorHandlers();
 
 // Configure React Query
 const queryClient = new QueryClient({
@@ -17,6 +21,24 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Preload critical images to avoid layout shifts
+const preloadCriticalImages = () => {
+  // List of critical images to preload
+  const criticalImages = [
+    '/images/empty-inbox.svg',
+    'https://ssl.gstatic.com/classroom/empty_states_v2/streams.svg',
+    // Add other critical images here
+  ];
+
+  criticalImages.forEach(src => {
+    const img = new Image();
+    img.src = src;
+  });
+};
+
+// Run preloading
+preloadCriticalImages();
 
 const root = createRoot(document.getElementById('root')!);
 

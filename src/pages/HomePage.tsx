@@ -23,7 +23,7 @@ const getRandomUnsplashImage = (className: string) => {
 };
 
 // Helper function to preload images and ensure they're cached
-const preloadImage = (src) => {
+const preloadImage = (src: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = src;
@@ -53,7 +53,8 @@ export default function HomePage() {
         
         // Preload all images to ensure they're cached
         Object.values(parsedImages).forEach(imgSrc => {
-          preloadImage(imgSrc).catch(() => console.log('Failed to preload image'));
+          // Add type assertion to fix TypeScript error
+          preloadImage(imgSrc as string).catch(() => console.log('Failed to preload image'));
         });
       } catch (e) {
         console.error('Error parsing banner images', e);
@@ -259,16 +260,20 @@ export default function HomePage() {
             
             const classData = JSON.parse(rawData);
             if (classData) {
-              const courseId = classData.id;
+              // Extract the course ID from the localStorage key
+              const courseId = key.replace('classData-', '');
+              
+              // Handle both old format (className) and new format (name)
+              const courseName = classData.name || classData.className || '';
               
               // Ensure all required fields are present with meaningful values
               const validatedCourse = {
                 id: courseId,
-                name: classData.name && classData.name !== '' ? classData.name : 'Class ' + courseId.slice(0, 4),
+                name: courseName !== '' ? courseName : 'Class ' + courseId.slice(0, 4),
                 section: classData.section || '',
                 teacherName: classData.teacherName || 'You',
                 coverImage: classData.coverImage || '',
-                enrollmentCode: classData.enrollmentCode || `code-${Date.now()}`,
+                enrollmentCode: classData.enrollmentCode || classData.classCode || `code-${Date.now()}`,
                 color: classData.color || '#ff8a65',
                 textColor: classData.textColor || 'white',
                 subject: classData.subject || '',
@@ -336,7 +341,7 @@ export default function HomePage() {
       // Cache the image immediately
       preloadImage(cardImage)
         .then(imgSrc => {
-          setBannerImages(prev => ({...prev, [classData.id]: imgSrc}));
+          setBannerImages(prev => ({...prev, [classData.id]: imgSrc as string}));
         })
         .catch(() => {
           // If loading fails, try another image
