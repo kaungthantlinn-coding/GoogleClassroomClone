@@ -143,6 +143,16 @@ export default function ClassPage() {
       const updatedData = { ...classData, color: newTheme.color, coverImage: newTheme.image };
       setClassData(updatedData);
       localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
+      
+      // Also update banner images in localStorage to keep them in sync
+      try {
+        const savedBannerImages = localStorage.getItem('bannerImages');
+        let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
+        bannerImagesObj[classId] = newTheme.image;
+        localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
+      } catch (e) {
+        console.error('Error updating banner images', e);
+      }
     }
   };
 

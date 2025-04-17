@@ -356,7 +356,11 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     </Link>
                     <button
                       onClick={() => {
+                        // Remove the class from localStorage
                         localStorage.removeItem(`classData-${classItem.id}`);
+                        
+                        // We intentionally don't remove banner images to prevent side effects
+                        // This ensures that if you recreate a class with the same ID, the banner image is preserved
                         
                         // Dispatch custom event for class removal
                         const classRemovedEvent = new CustomEvent('class-removed', {

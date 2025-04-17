@@ -22,6 +22,16 @@ const getRandomUnsplashImage = (className: string) => {
   return `https://source.unsplash.com/random/800x600?${query}&t=${timestamp}`;
 };
 
+// Helper function to preload images and ensure they're cached
+const preloadImage = (src) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = src;
+    img.onload = () => resolve(src);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+  });
+};
+
 export default function HomePage() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -37,7 +47,17 @@ export default function HomePage() {
     // Try to load saved banner images from localStorage
     const savedBannerImages = localStorage.getItem('bannerImages');
     if (savedBannerImages) {
-      setBannerImages(JSON.parse(savedBannerImages));
+      try {
+        const parsedImages = JSON.parse(savedBannerImages);
+        setBannerImages(parsedImages);
+        
+        // Preload all images to ensure they're cached
+        Object.values(parsedImages).forEach(imgSrc => {
+          preloadImage(imgSrc).catch(() => console.log('Failed to preload image'));
+        });
+      } catch (e) {
+        console.error('Error parsing banner images', e);
+      }
     }
   }, []);
   
@@ -65,9 +85,8 @@ export default function HomePage() {
     // Remove all class data keys
     keysToRemove.forEach(key => localStorage.removeItem(key));
     
-    // Clear banner images
-    localStorage.removeItem('bannerImages');
-    setBannerImages({});
+    // DON'T remove banner images - just refresh the current state
+    // This prevents the banner images from disappearing when recreating the classes
     
     // Force sidebar refresh by creating a special event to clear all classes
     const clearClassesEvent = new CustomEvent('class-removed', {
@@ -92,13 +111,25 @@ export default function HomePage() {
     if (selectedCourse) {
       // Store the archived class in localStorage
       const archivedClasses = JSON.parse(localStorage.getItem('archivedClasses') || '[]');
-      archivedClasses.push(selectedCourse);
+      
+      // Include the banner image in the archived data
+      let courseWithImage = {...selectedCourse};
+      
+      // Check if there's a banner image for this course and include it
+      const bannerImageForClass = bannerImages[selectedCourse.id];
+      if (bannerImageForClass) {
+        courseWithImage.coverImage = bannerImageForClass;
+      }
+      
+      archivedClasses.push(courseWithImage);
       localStorage.setItem('archivedClasses', JSON.stringify(archivedClasses));
 
       // Remove the class from the active classes
       const classKey = `classData-${selectedCourse.id}`;
       localStorage.removeItem(classKey);
-
+      
+      // BUT DON'T remove the banner image - this ensures it's preserved for other cards
+      
       // Dispatch a custom event to update the sidebar
       const classRemovedEvent = new CustomEvent('class-removed', {
         detail: {
@@ -302,7 +333,16 @@ export default function HomePage() {
     let cardImage = bannerImages[classData.id];
     if (!cardImage) {
       cardImage = themeData?.coverImage || classData.coverImage || getRandomUnsplashImage(classData.name);
-      setBannerImages(prev => ({...prev, [classData.id]: cardImage}));
+      // Cache the image immediately
+      preloadImage(cardImage)
+        .then(imgSrc => {
+          setBannerImages(prev => ({...prev, [classData.id]: imgSrc}));
+        })
+        .catch(() => {
+          // If loading fails, try another image
+          const fallbackImage = getRandomUnsplashImage(classData.name);
+          setBannerImages(prev => ({...prev, [classData.id]: fallbackImage}));
+        });
     }
     
     return (
