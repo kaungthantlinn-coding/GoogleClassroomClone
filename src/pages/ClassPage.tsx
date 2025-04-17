@@ -69,10 +69,28 @@ export default function ClassPage() {
   // Try to get class data from localStorage first, if not available use location.state
   const getInitialClassData = () => {
     const savedData = localStorage.getItem(`classData-${classId}`);
+    let classData = {};
+    
     if (savedData) {
-      return JSON.parse(savedData);
+      try {
+        classData = JSON.parse(savedData);
+      } catch (e) {
+        console.error('Error parsing class data', e);
+      }
     }
-    return location.state || { className: 'Class', section: 'Section' };
+    
+    // Use location state as a fallback, or for updates
+    const locationState = location.state || {};
+    
+    // Merge the data, prioritizing location state for updates
+    return {
+      ...classData,
+      ...locationState,
+      className: locationState.className || classData.name || 'Class',
+      section: locationState.section || classData.section || 'Section',
+      color: locationState.color || classData.color || '#1a73e8',
+      coverImage: locationState.coverImage || classData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
+    };
   };
   
   const [classData, setClassData] = useState(getInitialClassData());

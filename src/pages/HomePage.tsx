@@ -30,20 +30,52 @@ export default function HomePage() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [bannerImages, setBannerImages] = useState<{[key: string]: string}>({});
   
+  // Use useEffect to ensure banner images persist after page refresh
+  useEffect(() => {
+    // Try to load saved banner images from localStorage
+    const savedBannerImages = localStorage.getItem('bannerImages');
+    if (savedBannerImages) {
+      setBannerImages(JSON.parse(savedBannerImages));
+    }
+  }, []);
+  
+  // Save banner images to localStorage whenever they change
+  useEffect(() => {
+    if (Object.keys(bannerImages).length > 0) {
+      localStorage.setItem('bannerImages', JSON.stringify(bannerImages));
+    }
+  }, [bannerImages]);
+
   // Function to clear all created classes
   const clearCreatedClasses = () => {
     // Get all localStorage keys
     const keysToRemove = [];
+    const classIdsToRemove = [];
+    
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('classData-')) {
         keysToRemove.push(key);
+        classIdsToRemove.push(key.replace('classData-', ''));
       }
     }
     
     // Remove all class data keys
     keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    // Clear banner images
+    localStorage.removeItem('bannerImages');
+    setBannerImages({});
+    
+    // Force sidebar refresh by creating a special event to clear all classes
+    const clearClassesEvent = new CustomEvent('class-removed', {
+      detail: {
+        action: 'clearAll'
+      }
+    });
+    window.dispatchEvent(clearClassesEvent);
     
     // Refresh the courses list
     queryClient.invalidateQueries({ queryKey: ['courses'] });
@@ -66,6 +98,15 @@ export default function HomePage() {
       // Remove the class from the active classes
       const classKey = `classData-${selectedCourse.id}`;
       localStorage.removeItem(classKey);
+
+      // Dispatch a custom event to update the sidebar
+      const classRemovedEvent = new CustomEvent('class-removed', {
+        detail: {
+          action: 'removeClass',
+          classId: selectedCourse.id
+        }
+      });
+      window.dispatchEvent(classRemovedEvent);
 
       // Refresh the courses list
       queryClient.invalidateQueries({ queryKey: ['courses'] });
@@ -256,7 +297,13 @@ export default function HomePage() {
     
     // Use the saved theme data if available, otherwise fallback to default values
     const cardColor = themeData?.color || classData.color || '#1a73e8';
-    const cardImage = themeData?.coverImage || classData.coverImage || getRandomUnsplashImage(classData.name);
+    
+    // Get banner image from state or generate a new one if not exists
+    let cardImage = bannerImages[classData.id];
+    if (!cardImage) {
+      cardImage = themeData?.coverImage || classData.coverImage || getRandomUnsplashImage(classData.name);
+      setBannerImages(prev => ({...prev, [classData.id]: cardImage}));
+    }
     
     return (
       <Link
@@ -285,7 +332,10 @@ export default function HomePage() {
               className="w-full h-full object-cover"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
-                img.src = getRandomUnsplashImage(classData.name);
+                const newImage = getRandomUnsplashImage(classData.name);
+                img.src = newImage;
+                // Update banner images state when fallback is used
+                setBannerImages(prev => ({...prev, [classData.id]: newImage}));
               }}
             />
           </div>

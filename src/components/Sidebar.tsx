@@ -128,14 +128,28 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       }
     };
     
+    // Add new event listener for class deletion/archiving
+    const handleClassRemovedEvent = (event: CustomEvent) => {
+      if (event.detail?.action === 'removeClass' && event.detail.classId) {
+        setTeachingClasses(prevClasses => 
+          prevClasses.filter(cls => cls.id !== event.detail.classId)
+        );
+      } else if (event.detail?.action === 'clearAll') {
+        // Load the classes again to ensure the sidebar is up to date
+        loadClasses();
+      }
+    };
+    
     // Add event listeners
     window.addEventListener('storage', handleStorageEvent as EventListener);
     window.addEventListener('class-created', handleClassCreatedEvent as EventListener);
+    window.addEventListener('class-removed', handleClassRemovedEvent as EventListener);
     
     // Return cleanup function
     return () => {
       window.removeEventListener('storage', handleStorageEvent as EventListener);
       window.removeEventListener('class-created', handleClassCreatedEvent as EventListener);
+      window.removeEventListener('class-removed', handleClassRemovedEvent as EventListener);
     };
   }, []);
 
@@ -160,11 +174,56 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     { icon: Settings, label: 'Settings', to: '/settings' },
   ];
 
+  // Function to get the cover image for a class
+  const getCoverImageForClass = (classId: string, className: string): string => {
+    // First try to get from localStorage class data
+    const savedData = localStorage.getItem(`classData-${classId}`);
+    if (savedData) {
+      try {
+        const classData = JSON.parse(savedData);
+        if (classData.coverImage) {
+          return classData.coverImage;
+        }
+      } catch (e) {
+        console.error('Error parsing class data', e);
+      }
+    }
+    
+    // Then try from banner images
+    const savedBannerImages = localStorage.getItem('bannerImages');
+    if (savedBannerImages) {
+      try {
+        const bannerImages = JSON.parse(savedBannerImages);
+        if (bannerImages[classId]) {
+          return bannerImages[classId];
+        }
+      } catch (e) {
+        console.error('Error parsing banner images', e);
+      }
+    }
+    
+    // Default to a class-specific image if all else fails
+    let query = 'education,classroom';
+    if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
+      query = 'ui,design';
+    } else if (className.toLowerCase().includes('fullstack')) {
+      query = 'coding,programming';
+    } else if (className.toLowerCase().includes('riso')) {
+      query = 'technology,computer';
+    } else if (className.toLowerCase().includes('cloud')) {
+      query = 'technology,cloud,computing';
+    }
+    
+    return `https://source.unsplash.com/random/1600x900/?${query}`;
+  };
+
   const handleCreateClass = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClass.name) return;
 
     const id = `class-${Date.now()}`;
+    const coverImage = getCoverImageForClass(id, newClass.name);
+    
     const classToSave = {
       id,
       name: newClass.name,
@@ -172,7 +231,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       teacherName: 'You',
       enrollmentCode: `code-${Date.now().toString().slice(-6)}`,
       color: newClass.color || '#4285f4',
-      textColor: 'white'
+      textColor: 'white',
+      coverImage: coverImage
     };
 
     try {
@@ -275,6 +335,12 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                   <div key={classItem.id} className="group relative flex items-center">
                     <Link
                       to={`/class/${classItem.id}`}
+                      state={{
+                        className: classItem.name,
+                        section: classItem.section,
+                        color: classItem.color,
+                        coverImage: getCoverImageForClass(classItem.id, classItem.name)
+                      }}
                       className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
                     >
                       <div 
@@ -291,6 +357,17 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     <button
                       onClick={() => {
                         localStorage.removeItem(`classData-${classItem.id}`);
+                        
+                        // Dispatch custom event for class removal
+                        const classRemovedEvent = new CustomEvent('class-removed', {
+                          detail: {
+                            action: 'removeClass',
+                            classId: classItem.id
+                          }
+                        });
+                        window.dispatchEvent(classRemovedEvent);
+                        
+                        // Also update local state
                         setTeachingClasses(prevClasses => prevClasses.filter(cls => cls.id !== classItem.id));
                       }}
                       className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
