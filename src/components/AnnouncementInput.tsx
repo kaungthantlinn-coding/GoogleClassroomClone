@@ -497,7 +497,7 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
                       </div>
                     </div>
                     
-                    <div className="overflow-y-auto flex-1">
+                    <div className="overflow-y-auto flex-1 scroll-smooth" style={{ scrollBehavior: 'smooth' }}>
                       {/* Select All option */}
                       <div className="p-2 hover:bg-gray-100 rounded-md cursor-pointer" onClick={selectAllClasses}>
                         <label className="flex items-center space-x-3 cursor-pointer w-full">
