@@ -6,29 +6,60 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useState, useEffect } from 'react';
 import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
 
+// Fallback images when Unsplash API fails
+const FALLBACK_IMAGES = {
+  ui: 'https://images.pexels.com/photos/196645/pexels-photo-196645.jpeg',
+  coding: 'https://images.pexels.com/photos/546819/pexels-photo-546819.jpeg',
+  tech: 'https://images.pexels.com/photos/1181675/pexels-photo-1181675.jpeg',
+  education: 'https://images.pexels.com/photos/256520/pexels-photo-256520.jpeg',
+  default: 'https://images.pexels.com/photos/733856/pexels-photo-733856.jpeg'
+};
+
 const getRandomUnsplashImage = (className: string) => {
   const timestamp = Date.now();
   let query = 'education,classroom';
+  let fallbackKey = 'education';
   
   // Add specific themes based on class name
   if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
     query = 'ui,design';
+    fallbackKey = 'ui';
   } else if (className.toLowerCase().includes('fullstack')) {
     query = 'coding,programming';
+    fallbackKey = 'coding';
   } else if (className.toLowerCase().includes('riso')) {
     query = 'technology,computer';
+    fallbackKey = 'tech';
   }
   
-  return `https://source.unsplash.com/random/800x600?${query}&t=${timestamp}`;
+  return {
+    primary: `https://source.unsplash.com/random/800x600?${query}&t=${timestamp}`,
+    fallback: FALLBACK_IMAGES[fallbackKey as keyof typeof FALLBACK_IMAGES] || FALLBACK_IMAGES.default
+  };
 };
 
 // Helper function to preload images and ensure they're cached
-const preloadImage = (src: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
+const preloadImage = (src: string, fallbackSrc: string): Promise<string> => {
+  return new Promise((resolve) => {
     const img = new Image();
-    img.src = src;
+    
     img.onload = () => resolve(src);
-    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    
+    img.onerror = () => {
+      console.log(`Failed to load primary image: ${src}, using fallback`);
+      // Try the fallback image instead
+      const fallbackImg = new Image();
+      fallbackImg.src = fallbackSrc;
+      
+      fallbackImg.onload = () => resolve(fallbackSrc);
+      fallbackImg.onerror = () => {
+        console.log(`Fallback image also failed: ${fallbackSrc}`);
+        // If even the fallback fails, return a data URI of a simple colored rectangle
+        resolve(FALLBACK_IMAGES.default);
+      };
+    };
+    
+    img.src = src;
   });
 };
 
@@ -54,7 +85,7 @@ export default function HomePage() {
         // Preload all images to ensure they're cached
         Object.values(parsedImages).forEach(imgSrc => {
           // Add type assertion to fix TypeScript error
-          preloadImage(imgSrc as string).catch(() => console.log('Failed to preload image'));
+          preloadImage(imgSrc as string, FALLBACK_IMAGES.default).catch(() => console.log('Failed to preload image'));
         });
       } catch (e) {
         console.error('Error parsing banner images', e);
@@ -337,17 +368,30 @@ export default function HomePage() {
     // Get banner image from state or generate a new one if not exists
     let cardImage = bannerImages[classData.id];
     if (!cardImage) {
-      cardImage = themeData?.coverImage || classData.coverImage || getRandomUnsplashImage(classData.name);
-      // Cache the image immediately
-      preloadImage(cardImage)
-        .then(imgSrc => {
-          setBannerImages(prev => ({...prev, [classData.id]: imgSrc as string}));
-        })
-        .catch(() => {
-          // If loading fails, try another image
-          const fallbackImage = getRandomUnsplashImage(classData.name);
-          setBannerImages(prev => ({...prev, [classData.id]: fallbackImage}));
-        });
+      // If we have a saved image in theme data, use that
+      if (themeData?.coverImage) {
+        cardImage = themeData.coverImage;
+        // Save to banner images state
+        setBannerImages(prev => ({...prev, [classData.id]: cardImage}));
+      }
+      // Otherwise if we have a provided cover image
+      else if (classData.coverImage) {
+        cardImage = classData.coverImage;
+        // Save to banner images state
+        setBannerImages(prev => ({...prev, [classData.id]: cardImage}));
+      }
+      // Otherwise generate a new one
+      else {
+        const imageOptions = getRandomUnsplashImage(classData.name);
+        // Start with fallback image immediately to prevent UI flicker
+        cardImage = imageOptions.fallback;
+        
+        // Try to load Unsplash image in background
+        preloadImage(imageOptions.primary, imageOptions.fallback)
+          .then(imgSrc => {
+            setBannerImages(prev => ({...prev, [classData.id]: imgSrc}));
+          });
+      }
     }
     
     return (
@@ -377,10 +421,11 @@ export default function HomePage() {
               className="w-full h-full object-cover"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
-                const newImage = getRandomUnsplashImage(classData.name);
-                img.src = newImage;
-                // Update banner images state when fallback is used
-                setBannerImages(prev => ({...prev, [classData.id]: newImage}));
+                // Get appropriate fallback for this class type
+                const imageOptions = getRandomUnsplashImage(classData.name);
+                img.src = imageOptions.fallback;
+                // Update banner images state with fallback
+                setBannerImages(prev => ({...prev, [classData.id]: imageOptions.fallback}));
               }}
             />
           </div>

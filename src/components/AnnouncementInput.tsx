@@ -122,22 +122,29 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   }, [isExpanded]);
 
   return (
-    <div className="bg-white rounded-lg border border-[#dadce0] shadow-sm">
+    <div className="bg-white rounded-lg shadow-sm">
       {!isExpanded ? (
         <div 
           className="flex items-start p-4 cursor-text" 
           onClick={() => setIsExpanded(true)}
         >
-          <div className="w-8 h-8 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-sm">
+          <div className="w-8 h-8 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-sm mr-3">
             {user.avatar ? (
               <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full" />
             ) : (
               user.name[0].toUpperCase()
             )}
           </div>
-          <div className="flex-1 ml-3">
-            <div className="w-full py-2 text-sm text-[#5f6368]">
+          <div className="flex-1">
+            <div className="w-full py-1.5 text-sm text-[#5f6368]">
               Announce something to your class
+            </div>
+          </div>
+          <div className="ml-2">
+            <div className="p-2 text-gray-400">
+              <svg viewBox="0 0 24 24" width="22" height="22" className="mx-auto">
+                <path fill="currentColor" d="M17,7h2v2h-2V7z M17,11h2v2h-2V11z M17,15h2v2h-2V15z M11,7h2V18h-2V7z M7,14h2v2H7V14z M7,10h2v2H7V10z M5,7v12 h14V7H5z M21,5H3v16h18V5z"/>
+              </svg>
             </div>
           </div>
         </div>
