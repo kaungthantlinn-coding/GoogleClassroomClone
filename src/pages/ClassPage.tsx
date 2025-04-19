@@ -2,6 +2,7 @@ import React, { useState, createContext, useEffect, useContext } from 'react';
 import { useLocation, useParams, Link } from 'react-router-dom';
 import { Settings2, Copy, Calendar, MoreVertical, Expand, BellDot, Settings, Pencil } from 'lucide-react';
 import ClassworkPage from './ClassworkPage';
+import SubmissionsPage from './SubmissionsPage';
 import ThemeCustomizer from '../components/ThemeCustomizer';
 import AnnouncementInput from '../components/AnnouncementInput';
 import AnnouncementList from '../components/Announcement/AnnouncementList';
@@ -162,6 +163,7 @@ export default function ClassPage() {
   const isClasswork = currentPath.endsWith('/classwork');
   const isPeople = currentPath.endsWith('/people');
   const isGrades = currentPath.endsWith('/grades');
+  const isSubmissions = currentPath.includes('/submissions/');
 
   const handleThemeChange = (newTheme: { color: string; image: string }) => {
     setTheme(newTheme);
@@ -199,6 +201,9 @@ export default function ClassPage() {
   }, [classId]);
 
   const isActive = (path: string) => {
+    if (path === 'submissions' && isSubmissions) {
+      return 'text-[#1967d2] border-b-2 border-[#1967d2]';
+    }
     return location.pathname.includes(path) ? 'text-[#1967d2] border-b-2 border-[#1967d2]' : 'text-[#444746] hover:bg-[#f8f9fa]';
   };
 
@@ -424,6 +429,8 @@ export default function ClassPage() {
           {isPeople && <PeoplePage />}
           
           {isGrades && <GradesPage />}
+          
+          {isSubmissions && <SubmissionsPage />}
         </div>
       </div>
     </ClassDataContext.Provider>

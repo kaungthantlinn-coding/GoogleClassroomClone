@@ -37,20 +37,55 @@ export default function Navbar() {
 
   const isCalendarPage = location.pathname === '/calendar';
   const isClassPage = location.pathname.includes('/class/');
+  const isSubmissionsPage = location.pathname.includes('/submissions/');
   const isArchivedPage = location.pathname === '/archived';
   
   const getPageTitle = () => {
     if (isCalendarPage) return 'Calendar';
     if (isArchivedPage) return 'Archived classes';
-    if (isClassPage) {
+    if (isClassPage || isSubmissionsPage) {
+      // Extract class ID from URL path
+      const pathParts = location.pathname.split('/');
+      const classId = pathParts[2]; // class ID is the third segment in /class/:id or /submissions/:id
+      
+      // Try to get class data from localStorage
+      try {
+        const classData = localStorage.getItem(`classData-${classId}`);
+        if (classData) {
+          const parsedData = JSON.parse(classData);
+          // Check for both name and className fields to ensure we get the correct class name
+          return parsedData.name || parsedData.className || 'Class';
+        }
+      } catch (error) {
+        console.error('Error getting class name:', error);
+      }
+      
+      // Fallback to state or default
       const state = location.state as { className?: string };
-      return state?.className || '';
+      return state?.className || 'Class';
     }
     return '';
   };
   
   const getClassSection = () => {
-    if (isClassPage) {
+    if (isClassPage || isSubmissionsPage) {
+      // Extract class ID from URL path
+      const pathParts = location.pathname.split('/');
+      const classId = pathParts[2]; // class ID is the third segment in /class/:id or /submissions/:id
+      
+      // Try to get class data from localStorage
+      try {
+        const classData = localStorage.getItem(`classData-${classId}`);
+        if (classData) {
+          const parsedData = JSON.parse(classData);
+          // Make sure we check both section fields for consistency
+          return parsedData.section || '';
+        }
+      } catch (error) {
+        console.error('Error getting class section:', error);
+      }
+      
+      // Fallback to state or default
       const state = location.state as { section?: string };
       return state?.section || '';
     }
@@ -69,7 +104,7 @@ export default function Navbar() {
           </button>
           
           {/* Conditional rendering for breadcrumb */}
-          {(isCalendarPage || isClassPage || isArchivedPage || (getPageTitle() !== '')) ? (
+          {(isCalendarPage || isClassPage || isArchivedPage || (getPageTitle() !== '') || location.pathname.includes('/submissions/')) ? (
             <div className="flex items-center text-[22px]">
               <Link to="/" className="flex items-center gap-2 text-[#3c4043] hover:text-[#1a73e8]">
                 <img
@@ -80,7 +115,7 @@ export default function Navbar() {
                 <span className="tracking-tight">Classroom</span>
               </Link>
               <ChevronRight size={20} className="mx-1 text-[#5f6368]" />
-              {isClassPage ? (
+              {isClassPage || location.pathname.includes('/submissions/') ? (
                 <div className="flex flex-col">
                   <span className="text-[#3c4043] tracking-tight leading-tight">{getPageTitle()}</span>
                   {getClassSection() && (

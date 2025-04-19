@@ -1,8 +1,10 @@
+import React from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './routes';
 
-function App() {
+// Make sure the React import is properly detected
+const App: React.FC = () => {
   return <RouterProvider router={router} />;
-}
+};
 
 export default App;

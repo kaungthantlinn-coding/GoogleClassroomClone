@@ -52,11 +52,21 @@ root.render(
   </StrictMode>
 );
 
-// Register service worker with simpler configuration
-serviceWorkerRegistration.register({
-  onUpdate: registration => {
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+// Only register service worker in production
+if (process.env.NODE_ENV === 'production') {
+  // Register service worker with simpler configuration
+  serviceWorkerRegistration.register({
+    onUpdate: registration => {
+      if (registration && registration.waiting) {
+        // When there's an update, prompt the user to refresh
+        if (window.confirm('New version available! Reload to update?')) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          window.location.reload();
+        }
+      }
     }
-  }
-});
+  });
+} else {
+  // In development, make sure to unregister any existing service worker
+  serviceWorkerRegistration.unregister();
+}

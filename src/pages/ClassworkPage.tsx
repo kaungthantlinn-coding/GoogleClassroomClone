@@ -1,12 +1,17 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, Users, Upload, Link as LinkIcon } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import SelectClassModal from '../components/SelectClassModal';
 import ReusePostModal from '../components/ReusePostModal';
 import AddTopicModal from '../components/AddTopicModal';
+import AssignmentModal from '../components/AssignmentModal';
+import AssignmentCard from '../components/AssignmentCard';
 import { ClassDataContext } from './ClassPage';
+import { AssignmentData } from '../components/AssignmentModal';
 
 const ClassworkPage = () => {
   const classData = useContext(ClassDataContext);
+  const location = useLocation();
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [showAssignmentForm, setShowAssignmentForm] = useState(false);
   const [showQuizForm, setShowQuizForm] = useState(false);
@@ -22,6 +27,12 @@ const ClassworkPage = () => {
   const [answerType, setAnswerType] = useState('Short answer');
   const [studentsCanReply, setStudentsCanReply] = useState(true);
   const [studentsCanEdit, setStudentsCanEdit] = useState(false);
+  const [assignments, setAssignments] = useState<(AssignmentData & { id: string })[]>(() => {
+    // Load assignments from localStorage on initial render
+    const savedAssignments = localStorage.getItem('classworkAssignments');
+    return savedAssignments ? JSON.parse(savedAssignments) : [];
+  });
+  const [currentEditingAssignment, setCurrentEditingAssignment] = useState<string | null>(null);
 
   // Update document title when class data changes
   useEffect(() => {
@@ -29,6 +40,23 @@ const ClassworkPage = () => {
     const section = classData.section ? ` - ${classData.section}` : '';
     document.title = `${className}${section} - Classwork - Google Classroom`;
   }, [classData]);
+
+  // Check if we're coming back from a submission page
+  useEffect(() => {
+    if (location.state && location.state.fromAssignment) {
+      const assignmentId = location.state.fromAssignment;
+      // Find the assignment in our list to potentially highlight it
+      const assignmentElement = document.getElementById(`assignment-${assignmentId}`);
+      if (assignmentElement) {
+        assignmentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [location.state]);
+
+  // Save assignments to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('classworkAssignments', JSON.stringify(assignments));
+  }, [assignments]);
 
   const closeAllForms = () => {
     setShowAssignmentForm(false);
@@ -57,6 +85,46 @@ const ClassworkPage = () => {
     console.log('New topic:', newTopic);
   };
 
+  const handleAssignmentSubmit = useCallback((assignmentData: AssignmentData, editId?: string) => {
+    console.log('Assignment data:', assignmentData);
+    
+    if (editId) {
+      // Update existing assignment
+      setAssignments(prev => 
+        prev.map(assignment => 
+          assignment.id === editId 
+            ? { ...assignmentData, id: editId } 
+            : assignment
+        )
+      );
+    } else {
+      // Create new assignment
+      const newAssignment = {
+        ...assignmentData,
+        id: `assignment-${Date.now()}`, // Generate a temporary ID
+      };
+      
+      setAssignments(prev => [...prev, newAssignment]);
+    }
+    
+    closeAllForms();
+  }, [closeAllForms]);
+
+  const handleEditAssignment = (id: string) => {
+    setCurrentEditingAssignment(id);
+    setShowAssignmentForm(true);
+  };
+
+  const handleDeleteAssignment = (id: string) => {
+    setAssignments(assignments.filter(assignment => assignment.id !== id));
+  };
+
+  // Get the current assignment being edited
+  const getCurrentAssignment = () => {
+    if (!currentEditingAssignment) return null;
+    return assignments.find(a => a.id === currentEditingAssignment) || null;
+  };
+
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-6">
       {/* Create Button */}
@@ -74,6 +142,7 @@ const ClassworkPage = () => {
           <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
             <button 
               onClick={() => {
+                setCurrentEditingAssignment(null); // Ensure we're creating a new assignment
                 setShowAssignmentForm(true);
                 setShowQuizForm(false);
                 setShowQuestionForm(false);
@@ -149,23 +218,67 @@ const ClassworkPage = () => {
         )}
       </div>
 
-      {/* Empty State */}
-      {!showAssignmentForm && !showQuizForm && !showQuestionForm && !showMaterialForm && (
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="flex flex-col items-center py-16">
-            <img
-              src="/classwork-empty.svg"
-              alt="Empty classwork"
-              className="w-[240px] h-[240px] mb-6"
+      {/* Assignment Modal */}
+      <AssignmentModal 
+        isOpen={showAssignmentForm}
+        onClose={() => {
+          setShowAssignmentForm(false);
+          setCurrentEditingAssignment(null);
+        }}
+        onSubmit={handleAssignmentSubmit}
+        className={classData.className}
+        assignmentToEdit={getCurrentAssignment()}
+      />
+
+      {/* Assignment List or Empty State */}
+      {assignments.length > 0 ? (
+        <div className="space-y-4">
+          {assignments.map((assignment) => (
+            <AssignmentCard 
+              key={assignment.id}
+              id={assignment.id}
+              title={assignment.title}
+              description={assignment.instructions}
+              points={assignment.points}
+              dueDate={assignment.dueDate ? assignment.dueDate : ''}
+              isOverdue={!!assignment.dueDate}
+              onEdit={handleEditAssignment}
+              onDelete={handleDeleteAssignment}
             />
-            <h2 className="text-[22px] text-[#3c4043] font-normal mb-1">
-              This is where you'll assign work
-            </h2>
-            <p className="text-[#5f6368] text-[14px] text-center">
-              You can add assignments and other work for the class, then organize it into topics
-            </p>
-          </div>
+          ))}
         </div>
+      ) : (
+        // Empty State
+        !showAssignmentForm && !showQuizForm && !showQuestionForm && !showMaterialForm && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="flex flex-col items-center py-16">
+              <img
+                src="/classwork-empty.svg"
+                alt="Empty classwork"
+                className="w-[240px] h-[240px] mb-6"
+              />
+              {location.state && location.state.fromAssignment ? (
+                <>
+                  <h2 className="text-[22px] text-[#3c4043] font-normal mb-1">
+                    The assignment you were viewing could not be found
+                  </h2>
+                  <p className="text-[#5f6368] text-[14px] text-center">
+                    Create a new assignment by clicking the Create button above
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-[22px] text-[#3c4043] font-normal mb-1">
+                    This is where you'll assign work
+                  </h2>
+                  <p className="text-[#5f6368] text-[14px] text-center">
+                    You can add assignments and other work for the class, then organize it into topics
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {/* Material Form */}
@@ -591,119 +704,6 @@ const ClassworkPage = () => {
                     />
                     <span className="text-sm text-[#3c4043]">Students can edit answer</span>
                   </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Regular Assignment Form */}
-      {showAssignmentForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-16 z-50">
-          <div className="bg-white w-full max-w-[800px] rounded-lg">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setShowAssignmentForm(false)}>
-                  <X size={24} className="text-[#5f6368]" />
-                </button>
-                <span className="text-[#3c4043] text-xl">Assignment</span>
-              </div>
-              <button className="px-6 py-2 bg-[#1a73e8] text-white rounded text-sm font-medium hover:bg-[#1557b0]">
-                Assign
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-3 gap-6">
-                <div className="col-span-2">
-                  <input
-                    type="text"
-                    placeholder="Title"
-                    className="w-full p-3 text-[#3c4043] bg-[#f8f9fa] rounded text-sm focus:outline-none"
-                  />
-                  <div className="mt-6">
-                    <textarea
-                      placeholder="Instructions (optional)"
-                      className="w-full p-3 text-[#3c4043] bg-[#f8f9fa] rounded-t border-b text-sm focus:outline-none min-h-[100px] resize-none"
-                    />
-                    <div className="p-3 bg-[#f8f9fa] rounded-b">
-                      <div className="flex items-center gap-2">
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="font-bold">B</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="italic">I</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="underline">U</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="text-[#5f6368]">≡</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="text-[#5f6368]">⚡</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Attach Section */}
-                  <div className="mt-6">
-                    <h3 className="text-sm text-[#3c4043] mb-2">Attach</h3>
-                    <div className="flex gap-4">
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/drive-icon.svg" alt="Drive" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Drive</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/youtube-icon.svg" alt="YouTube" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">YouTube</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <Plus size={24} className="text-[#5f6368]" />
-                        <span className="text-xs text-[#5f6368]">Create</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/upload-icon.svg" alt="Upload" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Upload</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/link-icon.svg" alt="Link" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Link</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-sm text-[#3c4043] mb-2">For</h3>
-                    <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      {selectedClass}
-                    </button>
-                  </div>
-                  <div>
-                    <h3 className="text-sm text-[#3c4043] mb-2">Points</h3>
-                    <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      {points}
-                    </button>
-                  </div>
-                  <div>
-                    <h3 className="text-sm text-[#3c4043] mb-2">Due</h3>
-                    <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      {dueDate}
-                    </button>
-                  </div>
-                  <div>
-                    <h3 className="text-sm text-[#3c4043] mb-2">Topic</h3>
-                    <button className="w-full p-2 text-left text-sm border rounded hover:bg-[#f8f9fa]">
-                      {topic}
-                    </button>
-                  </div>
-                  <div>
-                    <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-4 py-2 rounded">
-                      + Rubric
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
