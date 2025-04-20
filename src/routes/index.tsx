@@ -25,12 +25,17 @@ export const router = createBrowserRouter([
       { path: 'archived', element: <ArchivedPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'to-review', element: <ToReviewPage /> },
+      
+      // Class context routes
       { path: 'class/:classId', element: <ClassPage /> },
       { path: 'class/:classId/stream', element: <ClassPage /> },
       { path: 'class/:classId/classwork', element: <ClassPage /> },
       { path: 'class/:classId/people', element: <ClassPage /> },
       { path: 'class/:classId/grades', element: <ClassPage /> },
-      { path: 'class/:classId/submissions/:assignmentId', element: <ClassPage /> },
+      { path: 'class/:classId/submissions/:assignmentId', element: <SubmissionsPage /> },
+      { path: 'class/:classId/submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
+      
+      // Non-class context routes
       { path: 'classwork', element: <ClassworkPage /> },
       { path: 'submissions/:assignmentId', element: <SubmissionsPage /> },
       { path: 'submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },

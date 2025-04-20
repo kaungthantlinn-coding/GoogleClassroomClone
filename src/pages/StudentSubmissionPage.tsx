@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Star, Download, CheckCircle } from 'lucide-react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
@@ -54,11 +54,104 @@ const getGradeColor = (letterGrade: string): string => {
 const StudentSubmissionPage: React.FC = () => {
   const { assignmentId, studentId } = useParams<{ assignmentId: string; studentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [activeTab, setActiveTab] = useState<'grade' | 'comments'>('grade');
+  const [feedback, setFeedback] = useState<string>('');
+  
+  // Extract class information from location state or local storage
+  const classIdFromPath = location.pathname.match(/\/class\/([^\/]+)/) ? 
+    location.pathname.match(/\/class\/([^\/]+)/)![1] : null;
+  
+  const classIdFromState = location.state?.classId;
+  const classIdFromStorage = localStorage.getItem('currentClassId');
+  
+  const classId = classIdFromPath || classIdFromState || classIdFromStorage || null;
+  
+  // If we have a class ID, store it for persistence across navigation
+  useEffect(() => {
+    if (classId) {
+      localStorage.setItem('currentClassId', classId);
+    }
+  }, [classId]);
+  
+  // Class data state
+  const [classData, setClassData] = useState(() => {
+    // Try to get class data from localStorage
+    const storedClassData = localStorage.getItem('currentClassData');
+    if (storedClassData) {
+      try {
+        return JSON.parse(storedClassData);
+      } catch (e) {
+        console.error("Failed to parse class data from localStorage", e);
+      }
+    }
+    // Default values
+    return {
+      className: "Cloud",
+      section: "Batch 2"
+    };
+  });
+
+  // Update localStorage when class data changes
+  useEffect(() => {
+    localStorage.setItem('currentClassData', JSON.stringify(classData));
+  }, [classData]);
   
   // Load the student data based on studentId
   useEffect(() => {
+    // Try to get class data from localStorage or location state
+    let className = "Cloud";
+    let section = "Batch 2";
+    
+    try {
+      const classDataStr = localStorage.getItem(`classData-${classId}`);
+      if (classDataStr) {
+        const classData = JSON.parse(classDataStr);
+        if (classData) {
+          className = classData.name || classData.className || className;
+          section = classData.section || section;
+        }
+      } else if (location.state?.className) {
+        className = location.state.className;
+        section = location.state.section || section;
+      }
+      
+      setClassData({
+        className,
+        section
+      });
+    } catch (e) {
+      console.error('Error loading class data from localStorage', e);
+    }
+    
+    // Try to load assignment data from localStorage
+    let assignmentTitle = 'Test';
+    let assignmentPoints = '100';
+    
+    try {
+      const assignmentKey = `assignment-${assignmentId}`;
+      const storedAssignment = localStorage.getItem(assignmentKey);
+      
+      if (storedAssignment) {
+        const parsedAssignment = JSON.parse(storedAssignment);
+        if (parsedAssignment) {
+          assignmentTitle = parsedAssignment.title || assignmentTitle;
+          assignmentPoints = parsedAssignment.points || assignmentPoints;
+          // Update class data if available in the assignment
+          if (parsedAssignment.className) {
+            className = parsedAssignment.className;
+            setClassData((prevData: { className: string; section: string }) => ({
+              ...prevData,
+              className: parsedAssignment.className
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading assignment data from localStorage', e);
+    }
+    
     // In a real app, this would be an API call, but we'll use mock data for the demo
     const studentData: { [key: string]: StudentSubmission } = {
       '1001': {
@@ -69,10 +162,10 @@ const StudentSubmissionPage: React.FC = () => {
         graded: false,
         assignment: {
           id: assignmentId || '',
-          title: 'Algebra: Equations and Inequalities',
-          className: 'Cloud',
-          section: 'Batch2',
-          points: '100',
+          title: assignmentTitle,
+          className: className,
+          section: section,
+          points: assignmentPoints,
         },
         attachedFiles: [
           { name: 'algebra_homework.pdf', type: 'pdf' },
@@ -86,10 +179,10 @@ const StudentSubmissionPage: React.FC = () => {
         graded: false,
         assignment: {
           id: assignmentId || '',
-          title: 'Algebra: Equations and Inequalities',
-          className: 'Cloud',
-          section: 'Batch2',
-          points: '100',
+          title: assignmentTitle,
+          className: className,
+          section: section,
+          points: assignmentPoints,
         },
         attachedFiles: [
           { name: 'algebra_homework_bob.pdf', type: 'pdf' },
@@ -108,10 +201,10 @@ const StudentSubmissionPage: React.FC = () => {
         gradedDate: 'April 19th, 2025 11:10 PM',
         assignment: {
           id: assignmentId || '',
-          title: 'Algebra: Equations and Inequalities',
-          className: 'Cloud',
-          section: 'Batch2',
-          points: '100',
+          title: assignmentTitle,
+          className: className,
+          section: section,
+          points: assignmentPoints,
         },
         attachedFiles: [
           { name: 'algebra_homework_charlie.pdf', type: 'pdf' },
@@ -123,10 +216,51 @@ const StudentSubmissionPage: React.FC = () => {
     if (studentId && studentData[studentId]) {
       setSubmission(studentData[studentId]);
     }
-  }, [assignmentId, studentId]);
+  }, [assignmentId, studentId, location, classId]);
+  
+  // Listen for new assignment creation events
+  useEffect(() => {
+    const handleNewAssignment = (event: CustomEvent) => {
+      const { assignmentId: newAssignmentId } = event.detail;
+      
+      // If this is the current assignment being viewed, update the submission data
+      if (newAssignmentId === assignmentId && submission) {
+        try {
+          const assignmentKey = `assignment-${newAssignmentId}`;
+          const storedAssignment = localStorage.getItem(assignmentKey);
+          
+          if (storedAssignment && submission) {
+            const parsedAssignment = JSON.parse(storedAssignment);
+            // Update the submission with new assignment data
+            setSubmission(prevSubmission => {
+              if (!prevSubmission) return prevSubmission;
+              
+              return {
+                ...prevSubmission,
+                assignment: {
+                  ...prevSubmission.assignment,
+                  title: parsedAssignment.title || prevSubmission.assignment.title,
+                  points: parsedAssignment.points || prevSubmission.assignment.points,
+                  className: parsedAssignment.className || prevSubmission.assignment.className,
+                }
+              };
+            });
+          }
+        } catch (e) {
+          console.error('Error loading new assignment data from localStorage', e);
+        }
+      }
+    };
+    
+    // Add event listener for new assignment creation
+    window.addEventListener('newAssignmentCreated', handleNewAssignment as EventListener);
+    
+    return () => {
+      window.removeEventListener('newAssignmentCreated', handleNewAssignment as EventListener);
+    };
+  }, [assignmentId, submission]);
   
   const [points, setPoints] = useState<string>('');
-  const [feedback, setFeedback] = useState<string>('');
   const [sendEmail, setSendEmail] = useState<boolean>(true);
   
   // Update form state when submission changes and has grade data
@@ -140,7 +274,43 @@ const StudentSubmissionPage: React.FC = () => {
   }, [submission]);
   
   const handleBackToSubmissions = () => {
-    navigate(`/submissions/${assignmentId}`);
+    // Check if we're in a class context
+    const isInClassContext = location.pathname.includes('/class/');
+    
+    if (isInClassContext) {
+      // If we're in a class context, keep that context in navigation
+      navigate(`/class/${classId}/submissions/${assignmentId}`, {
+        state: {
+          className: submission?.assignment.className,
+          section: submission?.assignment.section,
+          assignmentTitle: submission?.assignment.title
+        }
+      });
+    } else {
+      // Store class data in localStorage
+      if (submission?.assignment.className) {
+        try {
+          const classData = {
+            name: submission.assignment.className,
+            section: submission.assignment.section || '',
+            id: classId
+          };
+          localStorage.setItem(`classData-${classId}`, JSON.stringify(classData));
+        } catch (e) {
+          console.error('Error saving class data to localStorage', e);
+        }
+      }
+      
+      // Navigate to the submissions page with state to preserve context
+      navigate(`/submissions/${assignmentId}`, {
+        state: {
+          className: submission?.assignment.className,
+          section: submission?.assignment.section,
+          classId: classId,
+          assignmentTitle: submission?.assignment.title
+        }
+      });
+    }
   };
   
   const handleSubmitGrade = () => {
@@ -185,7 +355,28 @@ const StudentSubmissionPage: React.FC = () => {
     
     // Navigate back to submissions list after a short delay
     setTimeout(() => {
-      navigate(`/submissions/${assignmentId}`);
+      // Check if we're in a class context
+      const isInClassContext = location.pathname.includes('/class/');
+      
+      if (isInClassContext) {
+        navigate(`/class/${classId}/submissions/${assignmentId}`, {
+          state: {
+            className: submission.assignment.className,
+            section: submission.assignment.section,
+            classId: classId,
+            assignmentTitle: submission.assignment.title
+          }
+        });
+      } else {
+        navigate(`/submissions/${assignmentId}`, {
+          state: {
+            className: submission.assignment.className,
+            section: submission.assignment.section,
+            classId: classId,
+            assignmentTitle: submission.assignment.title
+          }
+        });
+      }
     }, 500);
   };
   
@@ -248,6 +439,10 @@ Date: ${new Date().toLocaleString()}`;
   
   return (
     <div className="flex flex-col w-full">
+
+
+      {/* Banner removed as requested */}
+      
       <div className="p-6">
         {/* Back link */}
         <div className="mb-6">
@@ -526,4 +721,4 @@ Date: ${new Date().toLocaleString()}`;
   );
 };
 
-export default StudentSubmissionPage; 
+export default StudentSubmissionPage;

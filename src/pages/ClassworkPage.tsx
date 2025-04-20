@@ -97,18 +97,66 @@ const ClassworkPage = () => {
             : assignment
         )
       );
-    } else {
-      // Create new assignment
-      const newAssignment = {
-        ...assignmentData,
-        id: `assignment-${Date.now()}`, // Generate a temporary ID
-      };
       
-      setAssignments(prev => [...prev, newAssignment]);
+      // Get the updated assignment from localStorage to ensure we have all metadata
+      try {
+        const assignmentKey = `assignment-${editId}`;
+        const storedAssignment = localStorage.getItem(assignmentKey);
+        if (storedAssignment) {
+          const parsedAssignment = JSON.parse(storedAssignment);
+          // Update the assignments list with the complete data
+          setAssignments(prev => 
+            prev.map(assignment => 
+              assignment.id === editId 
+                ? { ...parsedAssignment, id: editId } 
+                : assignment
+            )
+          );
+        }
+      } catch (e) {
+        console.error('Error loading updated assignment data', e);
+      }
+    } else {
+      // For new assignments, the ID is generated in the AssignmentModal
+      // We'll listen for the event to get the complete data
     }
     
     closeAllForms();
   }, [closeAllForms]);
+  
+  // Listen for assignment creation/update events
+  useEffect(() => {
+    const handleAssignmentEvent = (event: CustomEvent) => {
+      const { assignmentId, assignmentData } = event.detail;
+      
+      if (assignmentData) {
+        // Check if this assignment already exists in our list
+        const existingIndex = assignments.findIndex(a => a.id === assignmentId);
+        
+        if (existingIndex >= 0) {
+          // Update existing assignment
+          setAssignments(prev => 
+            prev.map(assignment => 
+              assignment.id === assignmentId 
+                ? { ...assignmentData, id: assignmentId } 
+                : assignment
+            )
+          );
+        } else {
+          // Add new assignment
+          setAssignments(prev => [...prev, { ...assignmentData, id: assignmentId }]);
+        }
+      }
+    };
+    
+    // Add event listener for assignment creation/update
+    window.addEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
+    };
+  }, [assignments]);
+  
 
   const handleEditAssignment = (id: string) => {
     setCurrentEditingAssignment(id);
@@ -127,6 +175,7 @@ const ClassworkPage = () => {
 
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-6">
+
       {/* Create Button */}
       <div className="relative mb-6">
         <button
@@ -736,4 +785,4 @@ const ClassworkPage = () => {
   );
 };
 
-export default ClassworkPage; 
+export default ClassworkPage;

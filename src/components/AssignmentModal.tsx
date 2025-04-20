@@ -138,9 +138,51 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     };
 
     if (assignmentToEdit) {
+      // Save updated assignment data to localStorage
+      const assignmentKey = `assignment-${assignmentToEdit.id}`;
+      const updatedData = {
+        ...assignmentData,
+        id: assignmentToEdit.id,
+        updatedAt: new Date().toISOString(),
+        className: className,
+        section: document.title.includes('-') ? document.title.split('-')[1].trim() : ''
+      };
+      
+      localStorage.setItem(assignmentKey, JSON.stringify(updatedData));
+      
+      // Dispatch a custom event to notify other components about the updated assignment
+      const updatedAssignmentEvent = new CustomEvent('newAssignmentCreated', {
+        detail: { assignmentId: assignmentToEdit.id, assignmentData: updatedData }
+      });
+      window.dispatchEvent(updatedAssignmentEvent);
+      
       onSubmit(assignmentData, assignmentToEdit.id);
     } else {
-      onSubmit(assignmentData);
+      // Generate a new ID for the assignment
+      const newId = `assignment-${Date.now()}`;
+      
+      // Get section from document title if available
+      const section = document.title.includes('-') ? document.title.split('-')[1].trim() : '';
+      
+      // Save new assignment data to localStorage with additional metadata
+      const assignmentKey = `assignment-${newId}`;
+      const newAssignmentData = {
+        ...assignmentData,
+        id: newId,
+        createdAt: new Date().toISOString(),
+        className: className,
+        section: section
+      };
+      
+      localStorage.setItem(assignmentKey, JSON.stringify(newAssignmentData));
+      
+      // Dispatch a custom event to notify other components about the new assignment
+      const newAssignmentEvent = new CustomEvent('newAssignmentCreated', {
+        detail: { assignmentId: newId, assignmentData: newAssignmentData }
+      });
+      window.dispatchEvent(newAssignmentEvent);
+      
+      onSubmit(assignmentData, newId);
     }
     
     resetForm();
@@ -786,4 +828,4 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
   );
 };
 
-export default AssignmentModal; 
+export default AssignmentModal;

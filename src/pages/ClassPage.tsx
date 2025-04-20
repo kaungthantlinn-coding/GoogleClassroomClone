@@ -92,7 +92,7 @@ export default function ClassPage() {
       className: locationState.className || classData.className || 'Class',
       section: locationState.section || classData.section || 'Section',
       color: locationState.color || classData.color || '#1a73e8',
-      coverImage: locationState.coverImage || classData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
+      coverImage: locationState.coverImage || classData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
     };
   };
   
@@ -154,7 +154,7 @@ export default function ClassPage() {
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState({
     color: classData.color || '#1a73e8',
-    image: classData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
+    image: classData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
   });
 
   // Get current path to determine active tab
@@ -193,7 +193,7 @@ export default function ClassPage() {
         const parsedData = JSON.parse(savedData);
         setTheme({
           color: parsedData.color || '#1a73e8',
-          image: parsedData.coverImage || 'https://source.unsplash.com/random/1600x900/?education,classroom'
+          image: parsedData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
         });
         setClassData(parsedData);
       }
@@ -294,7 +294,33 @@ export default function ClassPage() {
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
-                  img.src = 'https://source.unsplash.com/random/1600x900/?education,classroom';
+                  console.log('Banner image failed to load, using fallback');
+                  // Use local fallback images instead of Unsplash
+                  const fallbackImages = [
+                    '/classroom.png',
+                    'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg',
+                    'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg'
+                  ];
+                  // Try a different fallback image
+                  const randomFallback = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
+                  img.src = randomFallback;
+                  
+                  // Update the theme with the working fallback image
+                  if (classId) {
+                    const updatedData = { ...classData, coverImage: randomFallback };
+                    setClassData(updatedData);
+                    localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
+                    
+                    // Also update banner images in localStorage
+                    try {
+                      const savedBannerImages = localStorage.getItem('bannerImages');
+                      let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
+                      bannerImagesObj[classId] = randomFallback;
+                      localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
+                    } catch (e) {
+                      console.error('Error updating banner images', e);
+                    }
+                  }
                 }}
               />
             </div>
@@ -435,5 +461,5 @@ export default function ClassPage() {
       </div>
     </ClassDataContext.Provider>
   );
-} 
+}
 
