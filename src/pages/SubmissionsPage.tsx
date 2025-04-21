@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '../components/ui/label';
 import { Slider } from '../components/ui/slider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui/select';
+import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
+import { useStudentData } from '../contexts/StudentDataContext';
 
 interface Submission {
   id: string;
@@ -56,18 +58,9 @@ const SubmissionsPage: React.FC = () => {
   };
 
   const classId = getClassIdFromPath();
-  // Define assignment interface
-  interface AssignmentData {
-    id: string;
-    title: string;
-    courseName: string;
-    points: string;
-    className: string;
-    section: string;
-  }
 
   // Initialize with static data instead of empty values that would trigger API calls
-  const [assignment, setAssignment] = useState<AssignmentData>(() => {
+  const [assignment] = useState(() => {
     // Try to get assignment data from localStorage if available
     let assignmentData = {
       id: assignmentId || '',
@@ -117,38 +110,61 @@ const SubmissionsPage: React.FC = () => {
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Use static sample data instead of API calls for demo purposes
-  const [submissions, setSubmissions] = useState<Submission[]>([
-    {
-      id: '1',
-      studentName: 'Alice Smith',
-      studentId: '1001',
-      status: 'submitted',
-      submittedDate: 'June 12th, 2023 10:00 PM',
-    },
-    {
-      id: '2',
-      studentName: 'Bob Johnson',
-      studentId: '1002',
-      status: 'late',
-      submittedDate: 'June 17th, 2023 09:30 PM',
-    },
-    {
-      id: '3',
-      studentName: 'Charlie Davis',
-      studentId: '1003',
-      status: 'graded',
-      submittedDate: 'June 10th, 2023 08:15 PM',
-      grade: 100,
-    },
-    {
-      id: '4',
-      studentName: 'Diana Wilson',
-      studentId: '1004',
-      status: 'missing',
-      submittedDate: '',
-    },
-  ]);
+  // Get submissions from StudentDataContext
+  const { submissions: contextSubmissions } = useStudentData();
+  
+  // Use submissions from context or load from localStorage
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    // If we have submissions in context, use those
+    if (contextSubmissions && contextSubmissions.length > 0) {
+      return contextSubmissions;
+    }
+    
+    // Otherwise, try to load from localStorage
+    try {
+      const savedSubmissions = localStorage.getItem('submissions');
+      if (savedSubmissions) {
+        return JSON.parse(savedSubmissions);
+      }
+    } catch (e) {
+      console.error('Error loading submissions from localStorage', e);
+    }
+    
+    // Fallback to default data
+    return [
+      {
+        id: 'sub-1001',
+        studentName: 'Alice Smith',
+        studentId: '1001',
+        status: 'submitted',
+        submittedDate: 'June 12th, 2023 10:00 PM',
+      },
+      {
+        id: 'sub-1002',
+        studentName: 'Bob Johnson',
+        studentId: '1002',
+        status: 'late',
+        submittedDate: 'June 17th, 2023 09:30 PM',
+      },
+      {
+        id: 'sub-1003',
+        studentName: 'Charlie Davis',
+        studentId: '1003',
+        status: 'graded',
+        submittedDate: 'June 10th, 2023 08:15 PM',
+        grade: 100,
+        letterGrade: 'A',
+        gradePercentage: 100
+      },
+      {
+        id: 'sub-1004',
+        studentName: 'Diana Wilson',
+        studentId: '1004',
+        status: 'missing',
+        submittedDate: '',
+      },
+    ];
+  });
 
   // Store class data for consistent navigation
   useEffect(() => {
@@ -165,77 +181,6 @@ const SubmissionsPage: React.FC = () => {
       }
     }
   }, [classId, assignment]);
-  
-  // Listen for new assignment creation or update events
-  useEffect(() => {
-    const handleAssignmentEvent = (event: CustomEvent) => {
-      const { assignmentId: updatedAssignmentId, assignmentData } = event.detail;
-      
-      console.log('Assignment event received:', updatedAssignmentId);
-      console.log('Current assignment:', assignmentId);
-      console.log('Assignment data:', assignmentData);
-      
-      // If this is the current assignment being viewed, update the assignment data
-      if (updatedAssignmentId === assignmentId) {
-        try {
-          if (assignmentData) {
-            // If the event already contains the assignment data, use it directly
-            console.log('Updating assignment data from event:', assignmentData);
-            setAssignment((prevAssignment: AssignmentData) => ({
-              ...prevAssignment,
-              ...assignmentData,
-              id: updatedAssignmentId
-            }));
-          } else {
-            // Otherwise, try to get it from localStorage
-            const assignmentKey = `assignment-${updatedAssignmentId}`;
-            const storedAssignment = localStorage.getItem(assignmentKey);
-            
-            if (storedAssignment) {
-              const parsedAssignment = JSON.parse(storedAssignment);
-              console.log('Updating assignment data from localStorage:', parsedAssignment);
-              setAssignment((prevAssignment: AssignmentData) => ({
-                ...prevAssignment,
-                ...parsedAssignment,
-                id: updatedAssignmentId
-              }));
-            }
-          }
-        } catch (e) {
-          console.error('Error updating assignment data', e);
-        }
-      }
-    };
-    
-    // Add event listener for assignment creation/update
-    window.addEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
-    
-    return () => {
-      window.removeEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
-    };
-  }, [assignmentId]);
-  
-  // Load assignment data when component mounts or assignmentId changes
-  useEffect(() => {
-    if (assignmentId) {
-      try {
-        const assignmentKey = `assignment-${assignmentId}`;
-        const storedAssignment = localStorage.getItem(assignmentKey);
-        
-        if (storedAssignment) {
-          const parsedAssignment = JSON.parse(storedAssignment);
-          console.log('Loading assignment data on mount:', parsedAssignment);
-          setAssignment((prevAssignment: AssignmentData) => ({
-            ...prevAssignment,
-            ...parsedAssignment,
-            id: assignmentId
-          }));
-        }
-      } catch (e) {
-        console.error('Error loading assignment data on mount', e);
-      }
-    }
-  }, [assignmentId]);
 
   // Filtered submissions based on search term
   const filteredSubmissions = useMemo(() => {
@@ -269,54 +214,6 @@ const SubmissionsPage: React.FC = () => {
       submissionRate: totalStudents > 0 ? Math.round(((submitted + late + graded) / totalStudents) * 100) : 0,
     };
   }, [filteredSubmissions]);
-  
-  // Calculate average grade from filtered graded submissions
-  const averageGrade = useMemo(() => {
-    const gradedSubmissions = filteredSubmissions.filter(sub => sub.status === 'graded' && sub.grade !== undefined);
-    if (gradedSubmissions.length === 0) return 0;
-
-    const sum = gradedSubmissions.reduce((total, sub) => total + Number(sub.grade), 0);
-    return Math.round((sum / gradedSubmissions.length) * 10) / 10; // Round to 1 decimal place
-  }, [filteredSubmissions]);
-
-  // These functions are defined but not currently used in the UI
-  // Commented out to avoid TypeScript warnings
-  /*
-  // Calculate average grade from filtered graded submissions
-  const getAverageGrade = useCallback(() => {
-    const gradedSubmissions = filteredSubmissions.filter(sub => sub.status === 'graded' && sub.grade !== undefined);
-    if (gradedSubmissions.length === 0) return 0;
-
-    const sum = gradedSubmissions.reduce((total, sub) => total + Number(sub.grade), 0);
-    return sum / gradedSubmissions.length;
-  }, [filteredSubmissions]);
-
-  // Calculate median grade from filtered graded submissions
-  const getMedianGrade = useCallback(() => {
-    const gradedSubmissions = filteredSubmissions.filter(sub => sub.status === 'graded' && sub.grade !== undefined);
-    if (gradedSubmissions.length === 0) return 0;
-
-    const grades = gradedSubmissions.map(sub => Number(sub.grade)).sort((a, b) => a - b);
-    const mid = Math.floor(grades.length / 2);
-
-    return grades.length % 2 === 0
-      ? (grades[mid - 1] + grades[mid]) / 2
-      : grades[mid];
-  }, [filteredSubmissions]);
-  */
-
-  // Grade distribution function removed as chart is no longer needed
-
-  // Breadcrumb items - commented out as it's not used in the current UI
-  /*
-  const breadcrumbItems = useMemo(() => [
-    { label: 'Classroom', href: '/' },
-    { label: 'UI/UX', href: '/class/ui-ux' },
-    { label: 'Classwork', href: '/class/ui-ux/classwork' },
-    { label: 'Assignment', href: '/class/ui-ux/assignment/' + (assignmentId || '') },
-    { label: 'Submissions', href: '/class/ui-ux/submissions/' + (assignmentId || '') },
-  ], [assignmentId]);
-  */
 
   const handleBackToAssignment = useCallback(() => {
     // Check if we're in a class context
@@ -346,14 +243,14 @@ const SubmissionsPage: React.FC = () => {
     // Find the submission by ID to get the studentId
     const submission = submissions.find(sub => sub.id === submissionId);
     if (submission) {
-      // Check if we're in a class context
       if (classId) {
         // Navigate to the student submission page using studentId with class context
         navigate(`/class/${classId}/submissions/${assignmentId}/student/${submission.studentId}`, {
           state: {
+            classId,
             className: assignment.className,
             section: assignment.section,
-            classId: classId
+            assignmentTitle: assignment.title
           }
         });
       } else {
@@ -362,70 +259,67 @@ const SubmissionsPage: React.FC = () => {
           state: {
             className: assignment.className,
             section: assignment.section,
-            classId: 'riso-2'
+            assignmentTitle: assignment.title
           }
         });
       }
     }
-  }, [navigate, assignmentId, submissions, classId, assignment.className, assignment.section]);
+  }, [navigate, assignmentId, submissions, classId, assignment.className, assignment.section, assignment.title]);
 
   const handleGradeAll = useCallback(() => {
     setShowGradeAllModal(true);
   }, []);
 
   const applyGradeToAll = useCallback(() => {
+    // Get assignment points as a number
+    const maxPoints = parseInt(assignment.points);
+
     // Get IDs of students from filtered submissions
     const filteredIds = filteredSubmissions.map(sub => sub.id);
 
     // Update only filtered submissions, preserve others
     const updatedSubmissions = submissions.map(submission => {
-      if (filteredIds.includes(submission.id)) {
+      if (!filteredIds.includes(submission.id)) return submission;
+      if (submission.status === 'submitted') {
         return {
           ...submission,
-          grade: parseInt(gradeValue),
+          grade: maxPoints,
           status: 'graded' as const
         };
+      } else if (submission.status === 'late') {
+        return {
+          ...submission,
+          grade: Math.round(maxPoints * 0.9),
+          status: 'graded' as const
+        };
+      } else if (submission.status === 'missing') {
+        return {
+          ...submission,
+          grade: 0,
+        };
       }
+      // Keep graded as is, or optionally regrade
       return submission;
     });
 
     setSubmissions(updatedSubmissions);
     setShowGradeAllModal(false);
-  }, [gradeValue, submissions, filteredSubmissions]);
+  }, [assignment.points, submissions, filteredSubmissions]);
 
-  // Handle updating the submission status when returning from grading page
+  // Listen for submission updates
   useEffect(() => {
-    const handleStorageChange = () => {
-      const gradedSubmissionJson = localStorage.getItem('gradedSubmission');
-      if (gradedSubmissionJson) {
-        try {
-          const gradedSubmission = JSON.parse(gradedSubmissionJson);
-          // Update the submissions list with graded submission
-          setSubmissions(prevSubmissions =>
-            prevSubmissions.map(sub =>
-              sub.id === gradedSubmission.id ?
-                {
-                  ...sub,
-                  status: 'graded',
-                  grade: gradedSubmission.grade
-                } : sub
-            )
-          );
-          // Clear the storage after using it
-          localStorage.removeItem('gradedSubmission');
-        } catch (e) {
-          console.error('Error parsing graded submission', e);
-        }
-      }
+    const handleSubmissionUpdate = () => {
+      // The StudentDataContext will handle the actual data updates
+      // This effect is just to trigger UI refreshes when needed
+      console.log('Submission data updated');
     };
-
-    // Check for graded submissions when component mounts
-    handleStorageChange();
-
-    // Listen for storage changes (for cross-tab communication)
-    window.addEventListener('storage', handleStorageChange);
+    
+    window.addEventListener('submissionUpdated', handleSubmissionUpdate);
+    window.addEventListener('gradesUpdated', handleSubmissionUpdate);
+    
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('submissionUpdated', handleSubmissionUpdate);
+      window.removeEventListener('gradesUpdated', handleSubmissionUpdate);
     };
   }, []);
 
@@ -480,12 +374,12 @@ const SubmissionsPage: React.FC = () => {
 
         {/* Main Content */}
         <div className="flex flex-col gap-8">
-          {/* Submissions Title Section */}
-          <div className="border-b pb-4">
-            <h1 className="text-3xl font-bold text-gray-800">
-              {assignment.title} - Submissions
+          {/* Assignment title */}
+          <div>
+            <h1 className="text-2xl font-medium">
+              {assignment.title}-Submission
             </h1>
-            <div className="text-gray-500 text-sm flex items-center gap-2 mt-2">
+            <div className="text-gray-500 text-sm flex items-center gap-2 mt-1">
               <span>{assignment.className || assignment.courseName}</span>
               {assignment.section && (
                 <>
@@ -497,8 +391,6 @@ const SubmissionsPage: React.FC = () => {
               <span>{assignment.points} points</span>
             </div>
           </div>
-
-          {/* Assignment title - removing this section as it's now part of the Submissions title above */}
 
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -588,11 +480,12 @@ const SubmissionsPage: React.FC = () => {
                         <TableCell>
                           {submission.submittedDate || 'Not submitted'}
                         </TableCell>
-                        <TableCell>
-                          {submission.grade !== undefined
-                            ? `${submission.grade} / ${assignment.points}`
-                            : 'Not graded'
-                          }
+                        <TableCell className="text-center">
+                          {submission.status === 'graded' ? (
+                            <span className="font-medium">{submission.grade} / {assignment.points}</span>
+                          ) : (
+                            <span className="text-gray-500">Not graded</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -622,7 +515,12 @@ const SubmissionsPage: React.FC = () => {
             <DialogHeader>
               <DialogTitle>Grade All Submissions</DialogTitle>
               <DialogDescription>
-                This will apply the same grade to all visible submissions.
+                This will apply grades as follows:<br />
+                <span className="block mt-2">
+                  <b>Submitted:</b> 100%<br />
+                  <b>Late:</b> 90% (10% reduction)<br />
+                  <b>Missing:</b> 0% (no credit)
+                </span>
               </DialogDescription>
             </DialogHeader>
 

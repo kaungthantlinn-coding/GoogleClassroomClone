@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { router } from './routes';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { setupErrorHandlers } from './utils/errorHandling';
+import { StudentDataProvider } from './contexts/StudentDataContext';
 
 // Set up global error handlers before rendering the app
 setupErrorHandlers();
@@ -45,9 +46,11 @@ const root = createRoot(document.getElementById('root')!);
 root.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <RouterProvider router={router} />
-      </ErrorBoundary>
+      <StudentDataProvider>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
+      </StudentDataProvider>
     </QueryClientProvider>
   </StrictMode>
 );

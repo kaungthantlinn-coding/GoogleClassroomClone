@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { UserPlus, Calendar, BellDot, Settings } from 'lucide-react';
-import { useAuthStore } from '../stores/useAuthStore';
-import { Link, useParams, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { UserPlus } from 'lucide-react';
+import { useStudentData } from '../contexts/StudentDataContext';
+import AddStudentModal from '../components/AddStudentModal';
 
 interface Teacher {
   id: string;
@@ -10,24 +10,26 @@ interface Teacher {
   avatar?: string;
 }
 
-interface Student {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-}
-
 export default function PeoplePage() {
-  const user = useAuthStore((state) => state.user);
-  const { classId } = useParams();
-  const location = useLocation();
-
-  // Get current path to determine active tab
-  const currentPath = location.pathname;
-  const isStream = currentPath.endsWith('/stream') || currentPath === `/class/${classId}`;
-  const isClasswork = currentPath.endsWith('/classwork');
-  const isPeople = currentPath.endsWith('/people');
-  const isGrades = currentPath.endsWith('/grades');
+  const { students } = useStudentData();
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  
+  // Listen for student data updates
+  useEffect(() => {
+    const handleStudentUpdate = () => {
+      // The StudentDataContext will handle the actual data updates
+      // This effect is just to trigger UI refreshes when needed
+      console.log('Student data updated');
+    };
+    
+    window.addEventListener('studentDataUpdated', handleStudentUpdate);
+    window.addEventListener('newStudentAdded', handleStudentUpdate);
+    
+    return () => {
+      window.removeEventListener('studentDataUpdated', handleStudentUpdate);
+      window.removeEventListener('newStudentAdded', handleStudentUpdate);
+    };
+  }, []);
 
   const [teachers] = useState<Teacher[]>([
     {
@@ -37,8 +39,6 @@ export default function PeoplePage() {
       avatar: undefined
     }
   ]);
-
-  const [students] = useState<Student[]>([]);
 
   const EmptyStateIllustration = () => (
     <svg viewBox="0 0 221 161" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="w-48 h-48">
@@ -74,72 +74,21 @@ export default function PeoplePage() {
 
   return (
     <div className="min-h-screen bg-[#f9f9f9]">
-      {/* Navigation Tabs */}
-      <div className="bg-white border-b border-[#e0e0e0] w-full">
-        <div className="flex justify-between items-center w-full px-6">
-          <nav className="flex">
-            <Link
-              to={`/class/${classId}/stream`}
-              className={`px-4 py-[14px] text-[14px] ${
-                isStream 
-                  ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium" 
-                  : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
-              }`}
-            >
-              Stream
-            </Link>
-            <Link
-              to={`/class/${classId}/classwork`}
-              className={`px-4 py-[14px] text-[14px] ${
-                isClasswork 
-                  ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium" 
-                  : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
-              }`}
-            >
-              Classwork
-            </Link>
-            <Link
-              to={`/class/${classId}/people`}
-              className={`px-4 py-[14px] text-[14px] ${
-                isPeople 
-                  ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium" 
-                  : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
-              }`}
-            >
-              People
-            </Link>
-            <Link
-              to={`/class/${classId}/grades`}
-              className={`px-4 py-[14px] text-[14px] ${
-                isGrades 
-                  ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium" 
-                  : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
-              }`}
-            >
-              Grades
-            </Link>
-          </nav>
-          <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <Calendar size={20} className="text-[#444746]" />
-            </button>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <BellDot size={20} className="text-[#444746]" />
-            </button>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <Settings size={20} className="text-[#444746]" />
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {/* Add Student Modal */}
+      <AddStudentModal 
+        isOpen={showAddStudentModal} 
+        onClose={() => setShowAddStudentModal(false)} 
+      />
       {/* Main Content */}
       <div className="max-w-[1000px] mx-auto px-6 py-6">
         {/* Teachers Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[32px] font-normal text-[#3c4043]">Teachers</h2>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
+            <button 
+              className="p-2 hover:bg-[#f8f9fa] rounded-full"
+              onClick={() => setShowAddStudentModal(true)}
+            >
               <UserPlus size={20} className="text-[#1a73e8]" />
             </button>
           </div>
@@ -173,48 +122,57 @@ export default function PeoplePage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[32px] font-normal text-[#3c4043]">Students</h2>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
+            <button 
+              className="p-2 hover:bg-[#f8f9fa] rounded-full"
+              onClick={() => setShowAddStudentModal(true)}
+            >
               <UserPlus size={20} className="text-[#1a73e8]" />
             </button>
           </div>
-          {students.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <EmptyStateIllustration />
-              <div className="text-center">
-                <h3 className="text-[22px] text-[#3c4043] mb-2">Add students to this class</h3>
-                <button className="text-[#1a73e8] font-medium hover:bg-[#f6fafe] px-4 py-2 rounded">
-                  Invite students
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
+          {students.length > 0 ? (
+            <div className="space-y-2 bg-white rounded-lg border border-gray-200">
               {students.map((student) => (
                 <div
                   key={student.id}
-                  className="flex items-center gap-4 p-3 hover:bg-[#f8f9fa] rounded-lg"
+                  className="flex items-center justify-between gap-4 p-4 hover:bg-[#f8f9fa] border-b border-gray-100 last:border-b-0"
                 >
-                  {student.avatar ? (
-                    <img
-                      src={student.avatar}
-                      alt={student.name}
-                      className="w-10 h-10 rounded-full"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-[15px]">
-                      {student.name[0]}
+                  <div className="flex items-center gap-4">
+                    {student.avatar ? (
+                      <img
+                        src={student.avatar}
+                        alt={student.name}
+                        className="w-10 h-10 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-[15px]">
+                        {student.name[0]}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-[14px] text-[#3c4043]">{student.name}</div>
+                      <div className="text-[12px] text-[#5f6368]">{student.email || `student${student.id}@example.com`}</div>
                     </div>
-                  )}
-                  <div>
-                    <div className="text-[14px] text-[#3c4043]">{student.name}</div>
-                    <div className="text-[12px] text-[#5f6368]">{student.email}</div>
                   </div>
+                  {student.finalGrade && (
+                    <div className={`text-sm font-medium ${student.finalGradeColor || 'text-gray-600'}`}>{student.finalGrade}</div>
+                  )}
                 </div>
               ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+              <EmptyStateIllustration />
+              <p className="text-[#5f6368] mt-4">No students in this class yet</p>
+              <button 
+                className="mt-4 px-4 py-2 bg-[#1a73e8] text-white rounded-md hover:bg-[#1765c6] transition-colors"
+                onClick={() => setShowAddStudentModal(true)}
+              >
+                Add Student
+              </button>
             </div>
           )}
         </div>
       </div>
     </div>
   );
-} 
+}

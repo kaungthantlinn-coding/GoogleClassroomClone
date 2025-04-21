@@ -26,25 +26,10 @@ export const ClassDataContext = createContext<ClassData>({
   section: 'Section'
 });
 
-// Simple wrapper components for People and Grades
-const PeoplePage: React.FC = () => {
-  const classData = useContext(ClassDataContext);
-  
-  useEffect(() => {
-    const className = classData.className || 'Class';
-    const section = classData.section ? ` - ${classData.section}` : '';
-    document.title = `${className}${section} - People - Google Classroom`;
-  }, [classData]);
-  
-  return (
-    <div className="py-6">
-      <h2 className="text-2xl font-normal text-[#3c4043] mb-6">People</h2>
-      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-        <p className="text-[#5f6368]">People content coming soon...</p>
-      </div>
-    </div>
-  );
-};
+// Import the real PeoplePage component
+import PeoplePage from './PeoplePage';
+
+// Simple wrapper component for Grades
 
 const GradesPage: React.FC = () => {
   const classData = useContext(ClassDataContext);

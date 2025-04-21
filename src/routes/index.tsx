@@ -11,6 +11,7 @@ import ClassPage from '../pages/ClassPage';
 import ClassworkPage from '../pages/ClassworkPage';
 import SubmissionsPage from '../pages/SubmissionsPage';
 import StudentSubmissionPage from '../pages/StudentSubmissionPage';
+import GradesPage from '../pages/GradesPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export const router = createBrowserRouter([
@@ -31,7 +32,7 @@ export const router = createBrowserRouter([
       { path: 'class/:classId/stream', element: <ClassPage /> },
       { path: 'class/:classId/classwork', element: <ClassPage /> },
       { path: 'class/:classId/people', element: <ClassPage /> },
-      { path: 'class/:classId/grades', element: <ClassPage /> },
+      { path: 'class/:classId/grades', element: <GradesPage /> },
       { path: 'class/:classId/submissions/:assignmentId', element: <SubmissionsPage /> },
       { path: 'class/:classId/submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
       

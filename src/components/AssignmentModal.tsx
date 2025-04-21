@@ -56,7 +56,19 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
   const [allowLateSubmissions, setAllowLateSubmissions] = useState(true);
   const [showPointsDropdown, setShowPointsDropdown] = useState(false);
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
-  const [topics] = useState(['Unit 1', 'Unit 2', 'Projects', 'Homework']);
+  const [topics, setTopics] = useState(() => {
+    // Load topics from localStorage if available
+    const savedTopics = localStorage.getItem('topicsList');
+    if (savedTopics) {
+      try {
+        const parsedTopics = JSON.parse(savedTopics);
+        return Array.isArray(parsedTopics) ? parsedTopics : ['Unit 1', 'Unit 2', 'Projects', 'Homework'];
+      } catch (e) {
+        console.error('Error parsing saved topics', e);
+      }
+    }
+    return ['Unit 1', 'Unit 2', 'Projects', 'Homework'];
+  });
   const [rubric, setRubric] = useState<{ criteria: { description: string; points: number }[] }>({
     criteria: []
   });
@@ -86,6 +98,29 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
         setRubric({ criteria: [] });
       }
     } else if (isOpen && !assignmentToEdit) {
+      // Load saved values from localStorage when opening a new assignment form
+      const savedTopic = localStorage.getItem('lastSelectedTopic');
+      const savedScheduledDate = localStorage.getItem('scheduledPostDate');
+      const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
+      const savedTopicsList = localStorage.getItem('topicsList');
+      
+      // Initialize form with saved values if they exist
+      if (savedTopic) setTopic(savedTopic);
+      if (savedScheduledDate) setScheduledFor(savedScheduledDate);
+      if (savedAllowLateSubmissions) setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+      if (savedTopicsList) {
+        try {
+          const parsedTopics = JSON.parse(savedTopicsList);
+          if (Array.isArray(parsedTopics) && parsedTopics.length > 0) {
+            // Update topics state with saved topics using the setter function
+            setTopics(parsedTopics);
+          }
+        } catch (e) {
+          console.error('Error parsing saved topics list', e);
+        }
+      }
+      
+      // Reset other form fields
       resetForm();
     }
   }, [isOpen, assignmentToEdit]);
@@ -195,13 +230,27 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     setPoints('100');
     setDueDate('');
     setDueTime('');
-    setTopic('No topic');
+    
+    // Preserve topic if it was previously set in localStorage
+    const savedTopic = localStorage.getItem('lastSelectedTopic');
+    setTopic(savedTopic || 'No topic');
+    
     setAttachments([]);
     setIsCreatingRubric(false);
     setAssignTo(['All students']);
-    setScheduledFor(null);
+    
+    // Preserve scheduled post date if it was previously set in localStorage
+    const savedScheduledDate = localStorage.getItem('scheduledPostDate');
+    setScheduledFor(savedScheduledDate || null);
+    
     setGradeCategory('');
     setRubric({ criteria: [] });
+    
+    // Preserve late submission settings if they were previously set in localStorage
+    const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
+    if (savedAllowLateSubmissions) {
+      setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+    }
   };
 
   const handleFileUpload = () => {
@@ -628,6 +677,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                   <button 
                     onClick={() => setShowTopicDropdown(!showTopicDropdown)}
                     className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded flex items-center gap-1"
+                    data-testid="topic-dropdown-button"
                   >
                     {topic}
                     <ChevronDown size={16} />
@@ -638,6 +688,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         onClick={() => {
                           setTopic('No topic');
                           setShowTopicDropdown(false);
+                          // Save to localStorage for persistence
+                          localStorage.setItem('lastSelectedTopic', 'No topic');
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                       >
@@ -653,6 +705,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                           onClick={() => {
                             setTopic(topicItem);
                             setShowTopicDropdown(false);
+                            // Save to localStorage for persistence
+                            localStorage.setItem('lastSelectedTopic', topicItem);
                           }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                         >
@@ -666,8 +720,14 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                       <button
                         onClick={() => {
                           const newTopic = prompt('Enter new topic name:');
-                          if (newTopic) {
+                          if (newTopic && newTopic.trim() !== '') {
                             setTopic(newTopic);
+                            // Add to topics list for future selection using the setter function
+                            const updatedTopics = [...topics, newTopic];
+                            setTopics(updatedTopics);
+                            // Save to localStorage for persistence
+                            localStorage.setItem('lastSelectedTopic', newTopic);
+                            localStorage.setItem('topicsList', JSON.stringify(updatedTopics));
                           }
                           setShowTopicDropdown(false);
                         }}
@@ -764,11 +824,23 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                       <input 
                         type="date" 
                         value={scheduledFor || ''}
-                        onChange={(e) => setScheduledFor(e.target.value)}
+                        onChange={(e) => {
+                          setScheduledFor(e.target.value);
+                          // Save to localStorage for persistence
+                          if (e.target.value) {
+                            localStorage.setItem('scheduledPostDate', e.target.value);
+                          } else {
+                            localStorage.removeItem('scheduledPostDate');
+                          }
+                        }}
                         className="flex-1 px-3 py-2 text-sm border rounded-l focus:outline-none"
+                        data-testid="schedule-date-input"
                       />
                       <button 
-                        onClick={() => setScheduledFor(null)}
+                        onClick={() => {
+                          setScheduledFor(null);
+                          localStorage.removeItem('scheduledPostDate');
+                        }}
                         className="px-3 py-2 bg-[#f8f9fa] border border-l-0 rounded-r text-sm text-[#5f6368] hover:bg-[#f1f3f4]"
                       >
                         Clear
@@ -788,8 +860,14 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         type="checkbox" 
                         id="lateSubmissions"
                         checked={allowLateSubmissions}
-                        onChange={() => setAllowLateSubmissions(!allowLateSubmissions)}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          setAllowLateSubmissions(isChecked);
+                          // Save to localStorage for persistence
+                          localStorage.setItem('allowLateSubmissions', isChecked.toString());
+                        }}
                         className="mr-2"
+                        data-testid="late-submissions-checkbox"
                       />
                       <label htmlFor="lateSubmissions" className="text-sm text-[#3c4043]">
                         Accept late submissions
@@ -799,7 +877,15 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                       <div className="flex items-center gap-2 mt-2">
                         <div className="relative flex items-center">
                           <AlertCircle size={16} className="absolute left-2 text-[#5f6368]" />
-                          <select className="pl-8 pr-3 py-2 text-sm border rounded focus:outline-none appearance-none bg-[#f8f9fa]">
+                          <select 
+                            className="pl-8 pr-3 py-2 text-sm border rounded focus:outline-none appearance-none bg-[#f8f9fa]"
+                            onChange={(e) => {
+                              // Save late submission policy to localStorage
+                              localStorage.setItem('lateSubmissionPolicy', e.target.value);
+                            }}
+                            defaultValue={localStorage.getItem('lateSubmissionPolicy') || 'mark'}
+                            data-testid="late-submission-policy"
+                          >
                             <option value="mark">Mark as late</option>
                             <option value="reduce">Reduce points (10%)</option>
                             <option value="reject">Reject after 1 week</option>

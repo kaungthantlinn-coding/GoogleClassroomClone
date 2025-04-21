@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import { Input } from '../components/ui/input';
+import { useStudentData, Student, Submission } from '../contexts/StudentDataContext';
 
 interface StudentSubmission {
   id: string;
@@ -58,6 +59,7 @@ const StudentSubmissionPage: React.FC = () => {
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [activeTab, setActiveTab] = useState<'grade' | 'comments'>('grade');
   const [feedback, setFeedback] = useState<string>('');
+  const [loading, setLoading] = useState(false);
   
   // Extract class information from location state or local storage
   const classIdFromPath = location.pathname.match(/\/class\/([^\/]+)/) ? 
@@ -98,13 +100,50 @@ const StudentSubmissionPage: React.FC = () => {
     localStorage.setItem('currentClassData', JSON.stringify(classData));
   }, [classData]);
   
+  // Get student and submission data from context
+  const { students, submissions, updateSubmission, syncGradeData } = useStudentData();
+  
+  // Find the student once for safety
+  const student = students.find((s: Student) => s.id === studentId);
+  const [showNoSubmission, setShowNoSubmission] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !submission && student) {
+      // After loading, if no submission, show the no submission message
+      const timer = setTimeout(() => setShowNoSubmission(true), 1200); // 1.2s after loading
+      return () => clearTimeout(timer);
+    } else {
+      setShowNoSubmission(false);
+    }
+  }, [loading, submission, student]);
+
   // Load the student data based on studentId
   useEffect(() => {
+    setLoading(true);
     // Try to get class data from localStorage or location state
     let className = "Cloud";
     let section = "Batch 2";
+    let assignmentTitle = "Test";
+    let assignmentPoints = "100";
     
     try {
+      // First try to get assignment data from localStorage
+      const assignmentKey = `assignment-${assignmentId}`;
+      const storedAssignment = localStorage.getItem(assignmentKey);
+      if (storedAssignment) {
+        const parsedAssignment = JSON.parse(storedAssignment);
+        if (parsedAssignment) {
+          assignmentTitle = parsedAssignment.title || assignmentTitle;
+          assignmentPoints = parsedAssignment.points || assignmentPoints;
+          // If assignment has class info, use it
+          if (parsedAssignment.className) {
+            className = parsedAssignment.className;
+            section = parsedAssignment.section || section;
+          }
+        }
+      }
+      
+      // Then check class data
       const classDataStr = localStorage.getItem(`classData-${classId}`);
       if (classDataStr) {
         const classData = JSON.parse(classDataStr);
@@ -122,146 +161,49 @@ const StudentSubmissionPage: React.FC = () => {
         section
       });
     } catch (e) {
-      console.error('Error loading class data from localStorage', e);
+      console.error('Error loading data from localStorage', e);
     }
     
-    // Try to load assignment data from localStorage
-    let assignmentTitle = 'Test';
-    let assignmentPoints = '100';
-    
-    try {
-      const assignmentKey = `assignment-${assignmentId}`;
-      const storedAssignment = localStorage.getItem(assignmentKey);
+    // Simulate async loading, replace with real fetch if needed
+    setTimeout(() => {
+      // Find the student and their submission
+      const studentSubmission = submissions.find((sub: Submission) => sub.studentId === studentId);
       
-      if (storedAssignment) {
-        const parsedAssignment = JSON.parse(storedAssignment);
-        if (parsedAssignment) {
-          assignmentTitle = parsedAssignment.title || assignmentTitle;
-          assignmentPoints = parsedAssignment.points || assignmentPoints;
-          // Update class data if available in the assignment
-          if (parsedAssignment.className) {
-            className = parsedAssignment.className;
-            setClassData((prevData: { className: string; section: string }) => ({
-              ...prevData,
-              className: parsedAssignment.className
-            }));
-          }
-        }
+      if (student && studentSubmission) {
+        // Create a combined submission object with student and assignment data
+        const submissionData: StudentSubmission = {
+          id: studentSubmission.id,
+          studentName: student.name,
+          studentId: student.id,
+          submittedDate: studentSubmission.submittedDate || '',
+          graded: studentSubmission.status === 'graded',
+          grade: studentSubmission.grade,
+          gradePercentage: studentSubmission.gradePercentage,
+          letterGrade: studentSubmission.letterGrade,
+          feedback: studentSubmission.feedback,
+          gradedDate: studentSubmission.status === 'graded' ? new Date().toLocaleString('en-US') : undefined,
+          assignment: {
+            id: assignmentId || '',
+            title: assignmentTitle,
+            className: className,
+            section: section,
+            points: assignmentPoints,
+          },
+          attachedFiles: [
+            { name: `assignment_${studentId}.pdf`, type: 'pdf' },
+          ],
+        };
+        
+        setSubmission(submissionData);
+      } else {
+        setSubmission(null); // No submission found
       }
-    } catch (e) {
-      console.error('Error loading assignment data from localStorage', e);
-    }
-    
-    // In a real app, this would be an API call, but we'll use mock data for the demo
-    const studentData: { [key: string]: StudentSubmission } = {
-      '1001': {
-        id: '1',
-        studentName: 'Alice Smith',
-        studentId: '1001',
-        submittedDate: 'June 12th, 2023 10:00 PM',
-        graded: false,
-        assignment: {
-          id: assignmentId || '',
-          title: assignmentTitle,
-          className: className,
-          section: section,
-          points: assignmentPoints,
-        },
-        attachedFiles: [
-          { name: 'algebra_homework.pdf', type: 'pdf' },
-        ],
-      },
-      '1002': {
-        id: '2',
-        studentName: 'Bob Johnson',
-        studentId: '1002',
-        submittedDate: 'June 17th, 2023 09:30 PM',
-        graded: false,
-        assignment: {
-          id: assignmentId || '',
-          title: assignmentTitle,
-          className: className,
-          section: section,
-          points: assignmentPoints,
-        },
-        attachedFiles: [
-          { name: 'algebra_homework_bob.pdf', type: 'pdf' },
-        ],
-      },
-      '1003': {
-        id: '3',
-        studentName: 'Charlie Davis',
-        studentId: '1003',
-        submittedDate: 'June 10th, 2023 08:15 PM',
-        graded: true,
-        grade: 100,
-        gradePercentage: 100.0,
-        letterGrade: 'A',
-        feedback: 'Excellent Work',
-        gradedDate: 'April 19th, 2025 11:10 PM',
-        assignment: {
-          id: assignmentId || '',
-          title: assignmentTitle,
-          className: className,
-          section: section,
-          points: assignmentPoints,
-        },
-        attachedFiles: [
-          { name: 'algebra_homework_charlie.pdf', type: 'pdf' },
-        ],
-      }
-    };
-    
-    // Set the submission data for the current studentId
-    if (studentId && studentData[studentId]) {
-      setSubmission(studentData[studentId]);
-    }
-  }, [assignmentId, studentId, location, classId]);
-  
-  // Listen for new assignment creation events
-  useEffect(() => {
-    const handleNewAssignment = (event: CustomEvent) => {
-      const { assignmentId: newAssignmentId } = event.detail;
-      
-      // If this is the current assignment being viewed, update the submission data
-      if (newAssignmentId === assignmentId && submission) {
-        try {
-          const assignmentKey = `assignment-${newAssignmentId}`;
-          const storedAssignment = localStorage.getItem(assignmentKey);
-          
-          if (storedAssignment && submission) {
-            const parsedAssignment = JSON.parse(storedAssignment);
-            // Update the submission with new assignment data
-            setSubmission(prevSubmission => {
-              if (!prevSubmission) return prevSubmission;
-              
-              return {
-                ...prevSubmission,
-                assignment: {
-                  ...prevSubmission.assignment,
-                  title: parsedAssignment.title || prevSubmission.assignment.title,
-                  points: parsedAssignment.points || prevSubmission.assignment.points,
-                  className: parsedAssignment.className || prevSubmission.assignment.className,
-                }
-              };
-            });
-          }
-        } catch (e) {
-          console.error('Error loading new assignment data from localStorage', e);
-        }
-      }
-    };
-    
-    // Add event listener for new assignment creation
-    window.addEventListener('newAssignmentCreated', handleNewAssignment as EventListener);
-    
-    return () => {
-      window.removeEventListener('newAssignmentCreated', handleNewAssignment as EventListener);
-    };
-  }, [assignmentId, submission]);
+      setLoading(false);
+    }, 700); // 700ms for demo
+  }, [assignmentId, studentId, location, classId, students, submissions]);
   
   const [points, setPoints] = useState<string>('');
-  const [sendEmail, setSendEmail] = useState<boolean>(true);
+  const [sendEmail, setSendEmail] = useState<boolean>(false);
   
   // Update form state when submission changes and has grade data
   useEffect(() => {
@@ -315,12 +257,12 @@ const StudentSubmissionPage: React.FC = () => {
   
   const handleSubmitGrade = () => {
     if (!submission) return;
-    
+
     const numPoints = parseInt(points);
     const maxPoints = parseInt(submission.assignment.points);
     const percentage = (numPoints / maxPoints) * 100;
     const letterGrade = getLetterGrade(percentage);
-    
+
     // Update the submission with grade info
     const updatedSubmission: StudentSubmission = {
       ...submission,
@@ -330,35 +272,48 @@ const StudentSubmissionPage: React.FC = () => {
       feedback: feedback,
       graded: true,
       gradedDate: new Date().toLocaleString('en-US', {
-        year: 'numeric',
         month: 'long',
         day: 'numeric',
+        year: 'numeric',
         hour: 'numeric',
         minute: 'numeric',
         hour12: true
-      }).replace(' at', '')
+      })
     };
-    
+
     console.log('Submitting grade:', updatedSubmission);
-    
-    // In a real app, this would make an API call to update the grade
-    setSubmission(updatedSubmission);
-    
-    // Save the graded submission to localStorage so the submissions page can update
+
+    // Update the submission in the context
+    updateSubmission(submission.id, {
+      status: 'graded',
+      grade: numPoints,
+      letterGrade: letterGrade,
+      gradePercentage: percentage,
+      feedback: feedback
+    });
+
+    // Store the graded submission in localStorage
     localStorage.setItem('gradedSubmission', JSON.stringify({
-      id: updatedSubmission.id,
-      studentId: updatedSubmission.studentId,
-      grade: updatedSubmission.grade,
-      letterGrade: updatedSubmission.letterGrade,
-      feedback: updatedSubmission.feedback
+      id: submission.id,
+      studentId: submission.studentId,
+      grade: numPoints,
+      letterGrade,
+      gradePercentage: percentage,
+      feedback,
+      assignmentId: assignmentId
     }));
-    
+
+    // Sync grades to update student data
+    syncGradeData();
+
+    // Send notification if enabled
+    if (sendEmail) {
+      console.log('Sending email notification to student');
+    }
+
     // Navigate back to submissions list after a short delay
     setTimeout(() => {
-      // Check if we're in a class context
-      const isInClassContext = location.pathname.includes('/class/');
-      
-      if (isInClassContext) {
+      if (classId) {
         navigate(`/class/${classId}/submissions/${assignmentId}`, {
           state: {
             className: submission.assignment.className,
@@ -372,7 +327,7 @@ const StudentSubmissionPage: React.FC = () => {
           state: {
             className: submission.assignment.className,
             section: submission.assignment.section,
-            classId: classId,
+            classId: 'riso-2',
             assignmentTitle: submission.assignment.title
           }
         });
@@ -393,7 +348,7 @@ In a real application, this would be the actual content of the file.
 For this demo, we're just creating a text file with this message.
 
 File requested by: ${submission?.studentName}
-Assignment: ${submission?.assignment.title}
+Assignment: ${submission?.assignment.title}-Submission
 Date: ${new Date().toLocaleString()}`;
     
     // Create a Blob from the content
@@ -416,27 +371,67 @@ Date: ${new Date().toLocaleString()}`;
     }, 0);
   };
 
-  // Display loading state if submission data is not yet loaded
-  if (!submission) {
+  // For a missing student: show only the loading animation and message, nothing else
+  if (!submission && student && (showNoSubmission || loading)) {
+    const isMissing = submissions.find(
+      (sub: Submission) => sub.studentId === studentId && sub.status === 'missing'
+    );
+    if (isMissing) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-64px)] w-full bg-white">
+          <svg className="animate-spin h-12 w-12 text-blue-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+          <div className="text-lg text-gray-600">Loading submission data...</div>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  // Prevent any submission UI from rendering for missing students (safety net)
+  if (!submission && student) {
+    const isMissing = submissions.find(
+      (sub: Submission) => sub.studentId === studentId && sub.status === 'missing'
+    );
+    if (isMissing) {
+      return null;
+    }
+  }
+
+  if ((loading || (!submission && student && !showNoSubmission))) {
+    // Show loading or fallback for missing student submission
     return (
-      <div className="flex flex-col w-full p-6">
+      <div className="flex flex-col items-center justify-center h-96">
+        {/* Student avatar or fallback */}
         <div className="mb-6">
-          <Button 
-            variant="ghost" 
-            className="gap-2 p-0 hover:bg-transparent" 
-            onClick={handleBackToSubmissions}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span>Back to submissions</span>
-          </Button>
+          {student && student.avatar ? (
+            <img
+              src={student.avatar}
+              alt={student.name}
+              className="w-20 h-20 rounded-full border-4 border-blue-200 animate-pulse"
+            />
+          ) : (
+            <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-500 animate-pulse">
+              {student ? student.name.charAt(0) : '?' }
+            </div>
+          )}
         </div>
-        <div className="flex justify-center items-center h-64">
-          <p>Loading submission data...</p>
-        </div>
+        <svg className="animate-spin h-12 w-12 text-blue-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <div className="text-lg text-gray-600">Loading submission data...</div>
       </div>
     );
   }
-  
+
+  if (!submission) {
+    // This should never trigger due to above guards, but for safety
+    return null;
+  }
+
   return (
     <div className="flex flex-col w-full">
 
@@ -463,8 +458,7 @@ Date: ${new Date().toLocaleString()}`;
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"></path>
                   </svg>
                 </div>
                 <h1 className="text-2xl font-semibold">{submission.studentName}'s Submission</h1>
@@ -480,7 +474,7 @@ Date: ${new Date().toLocaleString()}`;
               
               <div className="mt-2 flex items-center">
                 <span className="text-gray-600">Assignment: </span>
-                <span className="ml-1 font-medium">{submission.assignment.title}</span>
+                <span className="ml-1 font-medium">{submission.assignment.title}-Submission</span>
               </div>
             </div>
             
@@ -620,7 +614,7 @@ Date: ${new Date().toLocaleString()}`;
               >
                 <div className="flex items-center justify-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"></path>
                   </svg>
                   <span>Comments</span>
                 </div>
