@@ -1,12 +1,43 @@
 import React, { useState, createContext, useEffect, useContext } from 'react';
 import { useLocation, useParams, Link } from 'react-router-dom';
-import { Settings2, Copy, Calendar, MoreVertical, Expand, BellDot, Settings, Pencil } from 'lucide-react';
+import { Settings2, Copy, Calendar, MoreVertical, Expand, BellDot, Settings, Pencil, Clock } from 'lucide-react';
 import ClassworkPage from './ClassworkPage';
 import SubmissionsPage from './SubmissionsPage';
 import ThemeCustomizer from '../components/ThemeCustomizer';
 import AnnouncementInput from '../components/AnnouncementInput';
 import AnnouncementList from '../components/Announcement/AnnouncementList';
+import UpcomingAssignmentsModal from '../components/UpcomingAssignmentsModal';
 import { Announcement } from '../types/announcement';
+
+import { Assignment, getUpcomingAssignments } from '../types/assignment';
+
+// Use the Assignment interface from our types
+
+// Helper function to format due date
+const formatDueDate = (dateString: string): string => {
+  if (!dateString) return 'No due date';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (e) {
+    return dateString; // Return the original string if parsing fails
+  }
+};
+
+// Helper function to get color based on assignment status
+const getStatusColor = (status?: string): string => {
+  switch (status) {
+    case 'due-soon': return '#e37400'; // Orange
+    case 'completed': return '#1e8e3e'; // Green
+    case 'missing': return '#d93025';   // Red
+    case 'upcoming': return '#1a73e8';  // Blue
+    default: return '#1a73e8';          // Default blue
+  }
+};
 
 // Define the class data interface
 export interface ClassData {
@@ -83,6 +114,72 @@ export default function ClassPage() {
   
   const [classData, setClassData] = useState(getInitialClassData());
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  
+  // Upcoming assignments data
+  const [upcomingAssignments, setUpcomingAssignments] = useState<Assignment[]>([]);
+  const [allUpcomingAssignments, setAllUpcomingAssignments] = useState<Assignment[]>([]);
+  const [showAllAssignments, setShowAllAssignments] = useState(false);
+  
+  // Load upcoming assignments when the component mounts or when classId changes
+  useEffect(() => {
+    if (classId) {
+      loadUpcomingAssignments();
+      
+      // Listen for assignment updates
+      const handleAssignmentUpdate = () => {
+        loadUpcomingAssignments();
+      };
+      
+      window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
+      window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
+      window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
+      
+      return () => {
+        window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
+        window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
+        window.removeEventListener('newAssignmentCreated', handleAssignmentUpdate);
+      };
+    }
+  }, [classId]);
+  
+  // Function to load upcoming assignments
+  const loadUpcomingAssignments = () => {
+    if (classId) {
+      const assignments = getUpcomingAssignments(classId);
+      
+      // Store all assignments
+      setAllUpcomingAssignments(assignments);
+      
+      // Sort assignments by priority: due-soon > missing > upcoming > completed
+      const sortedAssignments = [...assignments].sort((a, b) => {
+        const priorityOrder: Record<string, number> = {
+          'due-soon': 0,
+          'missing': 1,
+          'upcoming': 2,
+          'completed': 3
+        };
+        
+        const priorityA = priorityOrder[a.status || 'upcoming'];
+        const priorityB = priorityOrder[b.status || 'upcoming'];
+        
+        return priorityA - priorityB;
+      });
+      
+      // Limit to 1 assignment for display (most urgent one)
+      setUpcomingAssignments(sortedAssignments.slice(0, 1));
+    }
+  };
+  
+  // Function to handle View All click
+  const handleViewAllClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowAllAssignments(true);
+  };
+  
+  // Close the modal when done viewing all assignments
+  const handleCloseModal = () => {
+    setShowAllAssignments(false);
+  };
   
   // Load announcements when the component mounts or when classId changes
   useEffect(() => {
@@ -357,12 +454,48 @@ export default function ClassPage() {
 
                 {/* Upcoming */}
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="px-3 py-2 border-b">
+                  <div className="px-3 py-2 border-b flex justify-between items-center">
                     <h3 className="text-sm font-medium text-[#3c4043]">Upcoming</h3>
+                    <button className="p-1 hover:bg-[#f8f9fa] rounded-full">
+                      <Clock size={16} className="text-[#5f6368]" />
+                    </button>
                   </div>
-                  <div className="p-3">
-                    <p className="text-sm text-[#5f6368]">No work due soon</p>
-                    <a href="#" className="block mt-2 text-sm text-[#1a73e8] hover:bg-[#f6fafe] px-2 py-1 -mx-2 rounded">View all</a>
+                  <div className="p-3 space-y-3">
+                    {upcomingAssignments.length > 0 ? (
+                      upcomingAssignments.map((assignment) => (
+                        <div key={assignment.id} className="group cursor-pointer hover:bg-[#f8f9fa] -mx-3 px-3 py-1 rounded">
+                          <div className="flex items-start">
+                            <div className={`w-2 h-2 rounded-full mt-1.5 mr-2`} style={{ backgroundColor: assignment.color }}></div>
+                            <div>
+                              <div className="flex items-center flex-wrap">
+                                <span className="text-sm font-medium text-[#3c4043] group-hover:text-[#1a73e8]">{assignment.title}</span>
+                                {assignment.status === 'due-soon' && (
+                                  <span className="ml-2 text-xs px-1.5 py-0.5 bg-[#fef7e0] text-[#e37400] rounded">Due Tomorrow</span>
+                                )}
+                                {assignment.status === 'completed' && (
+                                  <span className="ml-2 text-xs px-1.5 py-0.5 bg-[#e6f4ea] text-[#1e8e3e] rounded">Completed</span>
+                                )}
+                                {assignment.status === 'missing' && (
+                                  <span className="ml-2 text-xs px-1.5 py-0.5 bg-[#fce8e6] text-[#d93025] rounded">Missing</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-[#5f6368] mt-0.5">
+                                {assignment.status === 'missing' ? 'Was due' : 'Due'} {assignment.dueDate}, {assignment.dueTime}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-[#5f6368]">No work due soon</p>
+                    )}
+                    <a 
+                      href="#" 
+                      onClick={handleViewAllClick}
+                      className="block mt-2 text-sm text-[#1a73e8] hover:bg-[#f6fafe] px-2 py-1 -mx-2 rounded"
+                    >
+                      View all
+                    </a>
                   </div>
                 </div>
               </div>
@@ -380,6 +513,15 @@ export default function ClassPage() {
                   onAnnouncementUpdate={loadAnnouncements} 
                 />
 
+                {/* Upcoming Assignments Modal */}
+                {showAllAssignments && (
+                  <UpcomingAssignmentsModal
+                    isOpen={showAllAssignments}
+                    onClose={handleCloseModal}
+                    assignments={allUpcomingAssignments}
+                  />
+                )}
+                
                 {/* Stream Empty State - Only show when there are no announcements */}
                 {announcements.length === 0 && (
                   <div className="bg-white rounded-lg border border-gray-200">
@@ -444,7 +586,12 @@ export default function ClassPage() {
           {isSubmissions && <SubmissionsPage />}
         </div>
       </div>
+      {/* Upcoming Assignments Modal */}
+      <UpcomingAssignmentsModal
+        isOpen={showAllAssignments}
+        onClose={() => setShowAllAssignments(false)}
+        assignments={allUpcomingAssignments}
+      />
     </ClassDataContext.Provider>
   );
 }
-

@@ -300,9 +300,28 @@ export const StudentDataProvider: React.FC<StudentDataProviderProps> = ({ childr
       const studentSubmissions = submissions.filter(sub => sub.studentId === student.id);
       const gradedSubmissions = studentSubmissions.filter(sub => sub.status === 'graded' && sub.grade !== undefined);
       
-      // If the student has no graded submissions, return the student unchanged
+      // Calculate participation based on submission status
+      // Participation is the percentage of assignments that were submitted (not missing)
+      const totalSubmissions = studentSubmissions.length;
+      const submittedCount = studentSubmissions.filter(sub => 
+        sub.status === 'submitted' || sub.status === 'late' || sub.status === 'graded'
+      ).length;
+      
+      // Calculate participation percentage
+      const participationPercentage = totalSubmissions > 0 
+        ? Math.round((submittedCount / totalSubmissions) * 100) + '%' 
+        : '0%';
+      
+      // If the student has no graded submissions, return with updated participation only
       if (gradedSubmissions.length === 0) {
-        return student;
+        return {
+          ...student,
+          participation: participationPercentage,
+          // Keep existing grades or set to 0% if undefined
+          assignmentAvg: student.assignmentAvg || '0%',
+          finalGrade: student.finalGrade || '0%',
+          finalGradeColor: student.finalGradeColor || 'text-red-600'
+        };
       }
       
       // Calculate average grade
@@ -321,6 +340,7 @@ export const StudentDataProvider: React.FC<StudentDataProviderProps> = ({ childr
       return {
         ...student,
         assignmentAvg: avgPercentage,
+        participation: participationPercentage,
         finalGrade: avgPercentage,
         finalGradeColor
       };

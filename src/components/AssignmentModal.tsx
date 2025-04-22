@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, Users, Calendar, Clock, Upload, Link as LinkIcon, AlertCircle, Paperclip, Plus, FileText, Check } from 'lucide-react';
+import { Assignment, saveAssignment } from '../types/assignment';
+import { useParams } from 'react-router-dom';
 
 interface AssignmentModalProps {
   isOpen: boolean;
@@ -39,6 +41,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
   className = 'Class',
   assignmentToEdit
 }) => {
+  const { classId } = useParams<{ classId: string }>();
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
   const [points, setPoints] = useState('100');
@@ -199,23 +202,18 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       // Get section from document title if available
       const section = document.title.includes('-') ? document.title.split('-')[1].trim() : '';
       
-      // Save new assignment data to localStorage with additional metadata
-      const assignmentKey = `assignment-${newId}`;
-      const newAssignmentData = {
+      // Create a complete assignment object
+      const newAssignmentData: Assignment = {
         ...assignmentData,
         id: newId,
         createdAt: new Date().toISOString(),
         className: className,
-        section: section
+        section: section,
+        classId: classId || ''
       };
       
-      localStorage.setItem(assignmentKey, JSON.stringify(newAssignmentData));
-      
-      // Dispatch a custom event to notify other components about the new assignment
-      const newAssignmentEvent = new CustomEvent('newAssignmentCreated', {
-        detail: { assignmentId: newId, assignmentData: newAssignmentData }
-      });
-      window.dispatchEvent(newAssignmentEvent);
+      // Save the assignment using our utility function
+      saveAssignment(newAssignmentData);
       
       onSubmit(assignmentData, newId);
     }

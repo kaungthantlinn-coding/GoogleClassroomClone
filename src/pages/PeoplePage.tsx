@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { UserPlus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserPlus, MoreVertical, Trash } from 'lucide-react';
 import { useStudentData } from '../contexts/StudentDataContext';
 import AddStudentModal from '../components/AddStudentModal';
 
@@ -11,8 +11,13 @@ interface Teacher {
 }
 
 export default function PeoplePage() {
-  const { students } = useStudentData();
+  const { students, removeStudent } = useStudentData();
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
+  
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   // Listen for student data updates
   useEffect(() => {
@@ -28,6 +33,20 @@ export default function PeoplePage() {
     return () => {
       window.removeEventListener('studentDataUpdated', handleStudentUpdate);
       window.removeEventListener('newStudentAdded', handleStudentUpdate);
+    };
+  }, []);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setActiveDropdownId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
@@ -134,7 +153,7 @@ export default function PeoplePage() {
               {students.map((student) => (
                 <div
                   key={student.id}
-                  className="flex items-center justify-between gap-4 p-4 hover:bg-[#f8f9fa] border-b border-gray-100 last:border-b-0"
+                  className="flex items-center justify-between gap-4 p-4 hover:bg-[#f8f9fa] border-b border-gray-100 last:border-b-0 relative"
                 >
                   <div className="flex items-center gap-4">
                     {student.avatar ? (
@@ -153,9 +172,37 @@ export default function PeoplePage() {
                       <div className="text-[12px] text-[#5f6368]">{student.email || `student${student.id}@example.com`}</div>
                     </div>
                   </div>
-                  {student.finalGrade && (
-                    <div className={`text-sm font-medium ${student.finalGradeColor || 'text-gray-600'}`}>{student.finalGrade}</div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {student.finalGrade && (
+                      <div className={`text-sm font-medium ${student.finalGradeColor || 'text-gray-600'}`}>{student.finalGrade}</div>
+                    )}
+                    <button
+                      onClick={() => setActiveDropdownId(activeDropdownId === student.id ? null : student.id)}
+                      className="p-1 rounded-full hover:bg-gray-100 text-gray-500"
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+                    
+                    {/* Dropdown menu */}
+                    {activeDropdownId === student.id && (
+                      <div 
+                        ref={dropdownRef}
+                        className="absolute right-4 top-12 bg-white shadow-lg rounded-md border border-gray-200 z-10 py-1 w-32"
+                      >
+                        <button 
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm flex items-center gap-2 text-red-600"
+                          onClick={() => {
+                            setStudentToDelete(student.id);
+                            setDeleteModalVisible(true);
+                            setActiveDropdownId(null);
+                          }}
+                        >
+                          <Trash size={16} />
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -173,6 +220,38 @@ export default function PeoplePage() {
           )}
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {deleteModalVisible && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Remove student?</h3>
+            <p className="text-gray-600 mb-6">
+              This will permanently remove the student from this class. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteModalVisible(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (studentToDelete) {
+                    removeStudent(studentToDelete);
+                    setDeleteModalVisible(false);
+                    setStudentToDelete(null);
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

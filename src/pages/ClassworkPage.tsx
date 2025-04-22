@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect, useCallback } from 'react';
 import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, Users, Upload, Link as LinkIcon } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import SelectClassModal from '../components/SelectClassModal';
 import ReusePostModal from '../components/ReusePostModal';
 import AddTopicModal from '../components/AddTopicModal';
@@ -8,6 +8,7 @@ import AssignmentModal from '../components/AssignmentModal';
 import AssignmentCard from '../components/AssignmentCard';
 import { ClassDataContext } from './ClassPage';
 import { AssignmentData } from '../components/AssignmentModal';
+import { Assignment, getClassAssignments, saveAssignment, deleteAssignment } from '../types/assignment';
 
 const ClassworkPage = () => {
   const classData = useContext(ClassDataContext);
@@ -27,11 +28,38 @@ const ClassworkPage = () => {
   const [answerType, setAnswerType] = useState('Short answer');
   const [studentsCanReply, setStudentsCanReply] = useState(true);
   const [studentsCanEdit, setStudentsCanEdit] = useState(false);
-  const [assignments, setAssignments] = useState<(AssignmentData & { id: string })[]>(() => {
-    // Load assignments from localStorage on initial render
-    const savedAssignments = localStorage.getItem('classworkAssignments');
-    return savedAssignments ? JSON.parse(savedAssignments) : [];
-  });
+  const { classId } = useParams<{ classId: string }>();
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  
+  // Load assignments for this class
+  useEffect(() => {
+    if (classId) {
+      loadAssignments();
+      
+      // Listen for assignment updates
+      const handleAssignmentUpdate = () => {
+        loadAssignments();
+      };
+      
+      window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
+      window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
+      window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
+      
+      return () => {
+        window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
+        window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
+        window.removeEventListener('newAssignmentCreated', handleAssignmentUpdate);
+      };
+    }
+  }, [classId]);
+  
+  // Function to load assignments
+  const loadAssignments = () => {
+    if (classId) {
+      const classAssignments = getClassAssignments(classId);
+      setAssignments(classAssignments);
+    }
+  };
   const [currentEditingAssignment, setCurrentEditingAssignment] = useState<string | null>(null);
 
   // Update document title when class data changes
@@ -53,10 +81,7 @@ const ClassworkPage = () => {
     }
   }, [location.state]);
 
-  // Save assignments to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('classworkAssignments', JSON.stringify(assignments));
-  }, [assignments]);
+  // No need to save assignments to localStorage anymore as it's handled by our utility functions
 
   const closeAllForms = () => {
     setShowAssignmentForm(false);
@@ -88,74 +113,15 @@ const ClassworkPage = () => {
   const handleAssignmentSubmit = useCallback((assignmentData: AssignmentData, editId?: string) => {
     console.log('Assignment data:', assignmentData);
     
-    if (editId) {
-      // Update existing assignment
-      setAssignments(prev => 
-        prev.map(assignment => 
-          assignment.id === editId 
-            ? { ...assignmentData, id: editId } 
-            : assignment
-        )
-      );
-      
-      // Get the updated assignment from localStorage to ensure we have all metadata
-      try {
-        const assignmentKey = `assignment-${editId}`;
-        const storedAssignment = localStorage.getItem(assignmentKey);
-        if (storedAssignment) {
-          const parsedAssignment = JSON.parse(storedAssignment);
-          // Update the assignments list with the complete data
-          setAssignments(prev => 
-            prev.map(assignment => 
-              assignment.id === editId 
-                ? { ...parsedAssignment, id: editId } 
-                : assignment
-            )
-          );
-        }
-      } catch (e) {
-        console.error('Error loading updated assignment data', e);
-      }
-    } else {
-      // For new assignments, the ID is generated in the AssignmentModal
-      // We'll listen for the event to get the complete data
-    }
-    
+    // The actual saving is now handled in the AssignmentModal component
+    // using our utility functions, so we just need to close the forms
     closeAllForms();
+    
+    // Reload assignments to reflect changes
+    loadAssignments();
   }, [closeAllForms]);
   
-  // Listen for assignment creation/update events
-  useEffect(() => {
-    const handleAssignmentEvent = (event: CustomEvent) => {
-      const { assignmentId, assignmentData } = event.detail;
-      
-      if (assignmentData) {
-        // Check if this assignment already exists in our list
-        const existingIndex = assignments.findIndex(a => a.id === assignmentId);
-        
-        if (existingIndex >= 0) {
-          // Update existing assignment
-          setAssignments(prev => 
-            prev.map(assignment => 
-              assignment.id === assignmentId 
-                ? { ...assignmentData, id: assignmentId } 
-                : assignment
-            )
-          );
-        } else {
-          // Add new assignment
-          setAssignments(prev => [...prev, { ...assignmentData, id: assignmentId }]);
-        }
-      }
-    };
-    
-    // Add event listener for assignment creation/update
-    window.addEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
-    
-    return () => {
-      window.removeEventListener('newAssignmentCreated', handleAssignmentEvent as EventListener);
-    };
-  }, [assignments]);
+  // No need for this effect anymore as we're using our utility functions
   
 
   const handleEditAssignment = (id: string) => {
@@ -164,6 +130,10 @@ const ClassworkPage = () => {
   };
 
   const handleDeleteAssignment = (id: string) => {
+    // Delete the assignment using our utility function
+    deleteAssignment(id);
+    
+    // Update the local state
     setAssignments(assignments.filter(assignment => assignment.id !== id));
   };
 
