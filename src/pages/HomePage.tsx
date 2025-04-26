@@ -418,7 +418,7 @@ export default function HomePage() {
             <img 
               src={cardImage}
               alt={`${classData.name} banner`}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover object-center"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
                 // Get appropriate fallback for this class type

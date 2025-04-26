@@ -17,26 +17,26 @@ export default function GradesPage() {
   // Get student data from context
   const { students, syncGradeData } = useStudentData();
   
+  // Add dummy state at the top-level of the component for force re-render
+  const [, forceUpdate] = useState(0);
+
   // Listen for grade updates
   useEffect(() => {
+    // Only trigger a lightweight re-render on grade events, never call syncGradeData here!
     const handleGradeUpdate = () => {
-      // Only update UI, do not call syncGradeData to avoid infinite loop
-      // Optionally, you could refetch students from context or trigger a re-render here
+      forceUpdate(n => n + 1); // Just re-render, don't sync again!
     };
-    
     window.addEventListener('gradesUpdated', handleGradeUpdate);
     window.addEventListener('submissionUpdated', handleGradeUpdate);
     window.addEventListener('newAssignmentCreated', handleGradeUpdate);
-    
     // Sync grades ONCE when component mounts
     syncGradeData();
-    
     return () => {
       window.removeEventListener('gradesUpdated', handleGradeUpdate);
       window.removeEventListener('submissionUpdated', handleGradeUpdate);
       window.removeEventListener('newAssignmentCreated', handleGradeUpdate);
     };
-  }, [syncGradeData]);
+  }, []); // Only run once on mount
 
   // Calculate class metrics from student data
   const classMetrics = {
@@ -149,11 +149,11 @@ export default function GradesPage() {
     <div className="min-h-screen bg-[#f9f9f9]">
       {/* Navigation Tabs */}
       <div className="bg-white border-b border-[#e0e0e0] w-full">
-        <div className="flex justify-between items-center w-full px-6">
-          <nav className="flex">
+        <div className="flex flex-wrap justify-between items-center w-full px-3 sm:px-6">
+          <nav className="flex overflow-x-auto scrollbar-hide">
             <Link
               to={`/class/${classId}/stream`}
-              className={`px-4 py-[14px] text-[14px] ${isStream
+              className={`px-2 sm:px-4 py-3 sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isStream
                   ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium"
                   : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
                 }`}
@@ -162,7 +162,7 @@ export default function GradesPage() {
             </Link>
             <Link
               to={`/class/${classId}/classwork`}
-              className={`px-4 py-[14px] text-[14px] ${isClasswork
+              className={`px-2 sm:px-4 py-3 sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isClasswork
                   ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium"
                   : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
                 }`}
@@ -171,7 +171,7 @@ export default function GradesPage() {
             </Link>
             <Link
               to={`/class/${classId}/people`}
-              className={`px-4 py-[14px] text-[14px] ${isPeople
+              className={`px-2 sm:px-4 py-3 sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isPeople
                   ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium"
                   : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
                 }`}
@@ -180,7 +180,7 @@ export default function GradesPage() {
             </Link>
             <Link
               to={`/class/${classId}/grades`}
-              className={`px-4 py-[14px] text-[14px] ${isGrades
+              className={`px-2 sm:px-4 py-3 sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isGrades
                   ? "text-[#1967d2] border-b-2 border-[#1967d2] font-medium"
                   : "text-[#444746] hover:text-[#1967d2] hover:bg-[#f8f9fa]"
                 }`}
@@ -188,51 +188,51 @@ export default function GradesPage() {
               Grades
             </Link>
           </nav>
-          <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <Calendar size={20} className="text-[#444746]" />
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button className="p-1 sm:p-2 hover:bg-[#f8f9fa] rounded-full">
+              <Calendar size={18} className="text-[#444746]" />
             </button>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <BellDot size={20} className="text-[#444746]" />
+            <button className="p-1 sm:p-2 hover:bg-[#f8f9fa] rounded-full">
+              <BellDot size={18} className="text-[#444746]" />
             </button>
-            <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
-              <Settings size={20} className="text-[#444746]" />
+            <button className="p-1 sm:p-2 hover:bg-[#f8f9fa] rounded-full">
+              <Settings size={18} className="text-[#444746]" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Header with Class Name and Export Button */}
-      <div className="bg-white border-b py-4 px-6 flex items-center justify-between">
+      <div className="bg-white border-b py-3 sm:py-4 px-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
         <div className="flex items-center gap-2">
           <div className="text-blue-700 bg-blue-100 rounded p-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" className="sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold">{location.state?.className || 'Class'} - Grades</h1>
+          <h1 className="text-xl sm:text-2xl font-bold truncate">{location.state?.className || 'Class'} - Grades</h1>
         </div>
-        <button className="flex items-center gap-2 border rounded-md px-4 py-2 hover:bg-gray-50" onClick={handleExportGrades}>
-          <Download size={18} />
+        <button className="flex items-center gap-2 border rounded-md px-3 sm:px-4 py-1.5 sm:py-2 text-sm sm:text-base hover:bg-gray-50" onClick={handleExportGrades}>
+          <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
           <span>Export Grades</span>
         </button>
       </div>
 
       {/* Main Content */}
-      <div className="px-6 py-6 flex flex-col lg:flex-row gap-6">
+      <div className="px-4 sm:px-6 py-4 sm:py-6 flex flex-col lg:flex-row gap-4 sm:gap-6">
         {/* Left side - Student Grades */}
-        <div className="flex-1">
-          <div className="bg-white border rounded-lg">
-            <div className="p-4 border-b flex items-center gap-2">
+        <div className="flex-1 order-2 lg:order-1">
+          <div className="bg-white border rounded-lg shadow-sm">
+            <div className="p-3 sm:p-4 border-b flex items-center gap-2">
               <svg className="text-blue-600" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
               </svg>
-              <h2 className="text-xl font-bold">Student Grades</h2>
+              <h2 className="text-lg sm:text-xl font-bold">Student Grades</h2>
             </div>
 
             {/* Search input */}
-            <div className="p-4 border-b">
+            <div className="p-3 sm:p-4 border-b">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                   <svg className="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
@@ -252,12 +252,12 @@ export default function GradesPage() {
             {/* Grades Table */}
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
+                <thead className="hidden sm:table-header-group">
                   <tr className="border-b">
-                    <th className="text-left py-4 px-6 font-medium text-gray-600">Student</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-600">Assignment Avg</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-600">Participation</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-600">Final Grade</th>
+                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Student</th>
+                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Assignment Avg</th>
+                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Participation</th>
+                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Final Grade</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -275,8 +275,8 @@ export default function GradesPage() {
                       else gradeColor = 'text-gray-400';
                       
                       return (
-                        <tr key={student.id || index} className="border-b hover:bg-gray-50">
-                          <td className="py-4 px-6 flex items-center gap-2">
+                        <tr key={student.id || index} className="border-b hover:bg-gray-50 sm:table-row flex flex-col">
+                          <td className="py-3 sm:py-4 px-3 sm:px-6 flex items-center gap-2">
                             {student.avatar ? (
                               <img src={student.avatar} alt={student.name} className="w-8 h-8 rounded-full" />
                             ) : (
@@ -286,9 +286,18 @@ export default function GradesPage() {
                             )}
                             <span>{student.name}</span>
                           </td>
-                          <td className="py-4 px-6">{student.assignmentAvg || '0%'}</td>
-                          <td className="py-4 px-6">{student.participation || '0%'}</td>
-                          <td className={`py-4 px-6 ${gradeColor} font-medium`}>{student.finalGrade || '0%'}</td>
+                          <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
+                            <span className="sm:hidden font-medium mr-2">Assignment Avg:</span>
+                            <span>{student.assignmentAvg || '0%'}</span>
+                          </td>
+                          <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
+                            <span className="sm:hidden font-medium mr-2">Participation:</span>
+                            <span>{student.participation || '0%'}</span>
+                          </td>
+                          <td className={`py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell ${gradeColor} font-medium`}>
+                            <span className="sm:hidden font-medium mr-2 text-gray-600">Final Grade:</span>
+                            <span>{student.finalGrade || '0%'}</span>
+                          </td>
                         </tr>
                       );
                     })
@@ -306,59 +315,59 @@ export default function GradesPage() {
         </div>
 
         {/* Right side - Class Metrics and Grade Distribution */}
-        <div className="w-full lg:w-[350px] space-y-6">
+        <div className="w-full lg:w-[350px] space-y-4 sm:space-y-6 order-1 lg:order-2">
           {/* Class Metrics */}
-          <div className="bg-white border rounded-lg">
-            <div className="p-4 border-b flex items-center gap-2">
+          <div className="bg-white border rounded-lg shadow-sm">
+            <div className="p-3 sm:p-4 border-b flex items-center gap-2">
               <svg className="text-blue-600" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 7h-9"></path>
                 <path d="M14 17H5"></path>
                 <circle cx="17" cy="17" r="3"></circle>
                 <circle cx="7" cy="7" r="3"></circle>
               </svg>
-              <h2 className="text-xl font-bold">Class Metrics</h2>
+              <h2 className="text-lg sm:text-xl font-bold">Class Metrics</h2>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Class Average:</span>
-                <span className="font-medium text-lg bg-blue-50 px-3 py-1 rounded-full">{classMetrics.average}</span>
+                <span className="text-gray-600 text-sm sm:text-base">Class Average:</span>
+                <span className="font-medium text-base sm:text-lg bg-blue-50 px-3 py-1 rounded-full">{classMetrics.average}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Highest Grade:</span>
-                <span className="font-medium text-lg text-green-600 bg-green-50 px-3 py-1 rounded-full">{classMetrics.highest}</span>
+                <span className="text-gray-600 text-sm sm:text-base">Highest Grade:</span>
+                <span className="font-medium text-base sm:text-lg text-green-600 bg-green-50 px-3 py-1 rounded-full">{classMetrics.highest}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Lowest Grade:</span>
-                <span className="font-medium text-lg text-red-600 bg-red-50 px-3 py-1 rounded-full">{classMetrics.lowest}</span>
+                <span className="text-gray-600 text-sm sm:text-base">Lowest Grade:</span>
+                <span className="font-medium text-base sm:text-lg text-red-600 bg-red-50 px-3 py-1 rounded-full">{classMetrics.lowest}</span>
               </div>
-              <div className="mt-2 pt-4 border-t">
-                <div className="text-sm text-gray-500 mb-1">Total Students: {students.length}</div>
-                <div className="text-sm text-gray-500">Graded: {students.filter(s => s.finalGrade && s.finalGrade !== '0%').length}</div>
+              <div className="mt-2 pt-3 sm:pt-4 border-t">
+                <div className="text-xs sm:text-sm text-gray-500 mb-1">Total Students: {students.length}</div>
+                <div className="text-xs sm:text-sm text-gray-500">Graded: {students.filter(s => s.finalGrade && s.finalGrade !== '0%').length}</div>
               </div>
             </div>
           </div>
 
           {/* Grade Distribution */}
-          <div className="bg-white border rounded-lg">
-            <div className="p-4 border-b flex items-center gap-2">
+          <div className="bg-white border rounded-lg shadow-sm">
+            <div className="p-3 sm:p-4 border-b flex items-center gap-2">
               <svg className="text-blue-600" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
                 <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
                 <line x1="6" y1="6" x2="6.01" y2="6"></line>
                 <line x1="6" y1="18" x2="6.01" y2="18"></line>
               </svg>
-              <h2 className="text-xl font-bold">Grade Distribution</h2>
+              <h2 className="text-lg sm:text-xl font-bold">Grade Distribution</h2>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {/* Enhanced bar chart with letter grades */}
-              <div className="h-48 flex items-end justify-between gap-1">
+              <div className="h-36 sm:h-48 flex items-end justify-between gap-1">
                 {gradeDistribution.map((grade, index) => (
                   <div key={index} className="flex flex-col items-center w-full">
                     <div className="relative w-full group">
                       <div
                         className="w-full rounded-t"
                         style={{
-                          height: `${Math.max(grade.count * 40, grade.count > 0 ? 20 : 4)}px`,
+                          height: `${Math.max(grade.count * 30, grade.count > 0 ? 16 : 4)}px`,
                           backgroundColor: grade.count > 0 ? 
                             index === 0 ? '#34A853' : // A - Green
                             index === 1 ? '#4285F4' : // B - Blue
@@ -369,7 +378,7 @@ export default function GradesPage() {
                         }}
                       ></div>
                       {grade.count > 0 && (
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white border rounded p-1 text-xs whitespace-nowrap shadow-md">
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white border rounded p-1 text-xs whitespace-nowrap shadow-md z-10">
                           <span className="font-medium">{grade.range}</span>
                           <br />
                           <span>Students: {grade.count}</span>
@@ -378,7 +387,7 @@ export default function GradesPage() {
                     </div>
                     <div className="flex flex-col items-center mt-2">
                       <span className="text-xs font-medium">{grade.label}</span>
-                      <span className="text-xs text-gray-500">{grade.range}</span>
+                      <span className="text-xs text-gray-500 hidden sm:block">{grade.range}</span>
                     </div>
                   </div>
                 ))}

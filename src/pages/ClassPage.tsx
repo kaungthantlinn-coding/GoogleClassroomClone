@@ -11,6 +11,14 @@ import { Announcement } from '../types/announcement';
 
 import { Assignment, getUpcomingAssignments } from '../types/assignment';
 
+// Breakpoint values for responsive design
+const BREAKPOINTS = {
+  sm: 640,  // Small devices
+  md: 768,  // Medium devices
+  lg: 1024, // Large devices
+  xl: 1280  // Extra large devices
+};
+
 // Use the Assignment interface from our types
 
 // Helper function to format due date
@@ -302,38 +310,38 @@ export default function ClassPage() {
       <div className="min-h-screen bg-[#f9f9f9]">
         {/* Navigation Tabs */}
         <div className="bg-white border-b border-[#e0e0e0] w-full z-30" style={{ position: 'sticky', top: 64 }}>
-          <div className="flex justify-between items-center w-full px-6">
-            <nav className="flex">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full px-3 sm:px-6">
+            <nav className="flex flex-wrap w-full sm:w-auto overflow-x-auto">
               <Link
                 to={`/class/${classId}/stream`}
                 state={classData}
-                className={`px-4 py-[14px] text-[14px] ${isActive('stream')}`}
+                className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('stream')}`}
               >
                 Stream
               </Link>
               <Link
                 to={`/class/${classId}/classwork`}
                 state={classData}
-                className={`px-4 py-[14px] text-[14px] ${isActive('classwork')}`}
+                className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('classwork')}`}
               >
                 Classwork
               </Link>
               <Link
                 to={`/class/${classId}/people`}
                 state={classData}
-                className={`px-4 py-[14px] text-[14px] ${isActive('people')}`}
+                className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('people')}`}
               >
                 People
               </Link>
               <Link
                 to={`/class/${classId}/grades`}
                 state={classData}
-                className={`px-4 py-[14px] text-[14px] ${isActive('grades')}`}
+                className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('grades')}`}
               >
                 Grades
               </Link>
             </nav>
-            <div className="flex items-center">
+            <div className="hidden sm:flex items-center">
               <button className="p-2 hover:bg-[#f8f9fa] rounded-full">
                 <Calendar size={20} className="text-[#444746]" />
               </button>
@@ -347,67 +355,141 @@ export default function ClassPage() {
           </div>
         </div>
 
-        {/* Banner */}
-        <div className="max-w-[1000px] mx-auto px-6 mt-6">
-          <div 
-            className="rounded-lg overflow-hidden relative h-[200px]"
-            style={{ backgroundColor: theme.color }}
-          >
-            <div className="relative z-10 p-6 pb-16">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h1 className="text-white text-[32px] font-normal">{classData.className || 'Class'}</h1>
-                  <p className="text-white/90 text-xl mt-1">{classData.section || 'Section'}</p>
+        {/* Helper function to determine responsive image size based on screen width */}
+        {(() => {
+          // Helper function to determine responsive image size based on screen width
+          const getResponsiveImageSize = (): string => {
+            // Default size for larger screens
+            let size = '1600x900';
+            
+            // Check if window is available (client-side)
+            if (typeof window !== 'undefined') {
+              const width = window.innerWidth;
+              
+              if (width < BREAKPOINTS.sm) {
+                // Small mobile devices
+                size = '640x360';
+              } else if (width < BREAKPOINTS.md) {
+                // Larger mobile devices
+                size = '768x432';
+              } else if (width < BREAKPOINTS.lg) {
+                // Tablets
+                size = '1024x576';
+              } else if (width < BREAKPOINTS.xl) {
+                // Small desktops
+                size = '1280x720';
+              }
+            }
+            
+            return size;
+          };
+          
+          // Helper function to update existing Unsplash URLs to be responsive
+          const getResponsiveImageUrl = (url: string): string => {
+            // If it's not an Unsplash URL, return as is
+            if (!url.includes('unsplash.com')) return url;
+            
+            try {
+              // Get the appropriate size for the current device
+              const imageSize = getResponsiveImageSize();
+              
+              // If it's an Unsplash random URL, update the size
+              if (url.includes('unsplash.com/random')) {
+                // Extract the query parameters
+                const queryMatch = url.match(/\?(.+)$/);
+                const query = queryMatch ? queryMatch[1] : '';
+                
+                // Create a new URL with the updated size
+                return `https://source.unsplash.com/random/${imageSize}/${query ? '?' + query : ''}`;
+              }
+              
+              // For specific Unsplash images (not random), we can use the Unsplash API format
+              // Example: https://images.unsplash.com/photo-123456?w=1600&h=900
+              if (url.includes('images.unsplash.com')) {
+                // Remove any existing size parameters
+                const baseUrl = url.split('?')[0];
+                const [width, height] = imageSize.split('x');
+                
+                // Add new responsive size parameters
+                return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
+              }
+            } catch (e) {
+              console.error('Error creating responsive image URL', e);
+            }
+            
+            // Return original URL if any issues occur
+            return url;
+          };
+
+          // Process the banner image URL to make it responsive
+          const processedImageUrl = theme.image && theme.image.includes('unsplash.com') 
+            ? getResponsiveImageUrl(theme.image)
+            : theme.image;
+
+          return (
+            <div className="max-w-[1000px] mx-auto px-6 mt-6">
+              <div 
+                className="rounded-lg overflow-hidden relative h-[180px] sm:h-[220px] md:h-[250px]"
+                style={{ backgroundColor: theme.color }}
+              >
+                <div className="relative z-10 p-4 sm:p-6 pb-16">
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                    <div>
+                      <h1 className="text-white text-[24px] sm:text-[32px] font-normal">{classData.className || 'Class'}</h1>
+                      <p className="text-white/90 text-lg sm:text-xl mt-1">{classData.section || 'Section'}</p>
+                    </div>
+                    <button
+                      onClick={() => setIsCustomizing(true)}
+                      className="bg-white hover:bg-gray-50 text-[#1a73e8] px-3 py-1.5 sm:px-4 sm:py-2 rounded flex items-center gap-2 text-sm font-medium"
+                    >
+                      <Pencil size={16} className="sm:size-18" />
+                      Customize
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setIsCustomizing(true)}
-                  className="bg-white hover:bg-gray-50 text-[#1a73e8] px-4 py-2 rounded flex items-center gap-2 text-sm font-medium"
-                >
-                  <Pencil size={18} />
-                  Customize
-                </button>
+                <div className="absolute inset-0 z-0">
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
+                  <img 
+                    src={processedImageUrl}
+                    alt="Class banner"
+                    className="w-full h-full object-cover object-center"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      console.log('Banner image failed to load, using fallback');
+                      // Use local fallback images instead of Unsplash
+                      const fallbackImages = [
+                        '/classroom.png',
+                        'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg',
+                        'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg'
+                      ];
+                      // Try a different fallback image
+                      const randomFallback = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
+                      img.src = randomFallback;
+                      
+                      // Update the theme with the working fallback image
+                      if (classId) {
+                        const updatedData = { ...classData, coverImage: randomFallback };
+                        setClassData(updatedData);
+                        localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
+                        
+                        // Also update banner images in localStorage
+                        try {
+                          const savedBannerImages = localStorage.getItem('bannerImages');
+                          let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
+                          bannerImagesObj[classId] = randomFallback;
+                          localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
+                        } catch (e) {
+                          console.error('Error updating banner images', e);
+                        }
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
-            <div className="absolute inset-0 z-0">
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
-              <img 
-                src={theme.image}
-                alt="Class banner"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  console.log('Banner image failed to load, using fallback');
-                  // Use local fallback images instead of Unsplash
-                  const fallbackImages = [
-                    '/classroom.png',
-                    'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg',
-                    'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg'
-                  ];
-                  // Try a different fallback image
-                  const randomFallback = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
-                  img.src = randomFallback;
-                  
-                  // Update the theme with the working fallback image
-                  if (classId) {
-                    const updatedData = { ...classData, coverImage: randomFallback };
-                    setClassData(updatedData);
-                    localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
-                    
-                    // Also update banner images in localStorage
-                    try {
-                      const savedBannerImages = localStorage.getItem('bannerImages');
-                      let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
-                      bannerImagesObj[classId] = randomFallback;
-                      localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
-                    } catch (e) {
-                      console.error('Error updating banner images', e);
-                    }
-                  }
-                }}
-              />
-            </div>
-          </div>
-        </div>
+          );
+        })()}
+        
 
         {/* Theme Customizer Modal */}
         <ThemeCustomizer
@@ -418,9 +500,9 @@ export default function ClassPage() {
         />
 
         {/* Main Content */}
-        <div className="max-w-[1000px] mx-auto pt-4 px-6">
+        <div className="max-w-[1000px] mx-auto pt-4 px-3 sm:px-6">
           {isStream && (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Left Sidebar */}
               <div className="col-span-1 space-y-3">
                 {/* Class Code */}
@@ -501,7 +583,7 @@ export default function ClassPage() {
               </div>
 
               {/* Main Stream Content */}
-              <div className="col-span-3">
+              <div className="col-span-1 sm:col-span-2 lg:col-span-3">
                 {/* Announcement Input */}
                 <div className="mb-4">
                   <AnnouncementInput onAnnouncementPosted={loadAnnouncements} />

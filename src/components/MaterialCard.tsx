@@ -71,23 +71,23 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow" id={`material-${id}`}>
+      <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow" id={`material-${id}`}>
         <div className="flex justify-between items-start mb-2">
-          <div className="flex items-start gap-3">
-            <BookOpen size={24} className="text-[#2563eb] mt-1" />
+          <div className="flex items-start gap-2 sm:gap-3">
+            <BookOpen size={20} className="text-[#2563eb] mt-1 sm:w-6 sm:h-6" />
             <div>
-              <h3 className="text-[16px] font-medium text-[#3c4043]">{title}</h3>
+              <h3 className="text-sm sm:text-base md:text-[16px] font-medium text-[#3c4043]">{title}</h3>
               {description && (
-                <p className="text-[14px] text-[#5f6368] mt-1">
+                <p className="text-xs sm:text-sm md:text-[14px] text-[#5f6368] mt-1">
                   {description.length > 100 ? `${description.substring(0, 100)}...` : description}
                 </p>
               )}
               
               {/* Attachments */}
               {attachments.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2">
                   {attachments.map((attachment, index) => (
-                    <div key={index} className="flex items-center gap-2 text-[14px] text-[#3c4043]">
+                    <div key={index} className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-[14px] text-[#3c4043]">
                       {getAttachmentIcon(attachment.type)}
                       <span>{attachment.name}</span>
                     </div>

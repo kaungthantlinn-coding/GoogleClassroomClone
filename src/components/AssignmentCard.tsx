@@ -48,18 +48,6 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
     setShowMenu(false);
   };
 
-  const handleDeleteClick = () => {
-    setShowMenu(false);
-    setShowDeleteConfirmation(true);
-  };
-
-  const confirmDelete = () => {
-    if (onDelete) {
-      onDelete(id);
-    }
-    setShowDeleteConfirmation(false);
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -94,10 +82,10 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow" id={`assignment-${id}`}>
+      <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow" id={`assignment-${id}`}>
         <div className="flex justify-between items-start mb-2">
-          <div className="flex items-start gap-3">
-            <FileText className="text-[#1a73e8] mt-1" size={20} />
+          <div className="flex items-start gap-2 sm:gap-3">
+            <FileText className="text-[#1a73e8] mt-1 sm:w-5 sm:h-5" size={18} />
             <h3 className="text-lg font-medium text-[#1a73e8]">{title}</h3>
           </div>
           <div className="flex items-center gap-3">
@@ -122,7 +110,10 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
                     Edit
                   </button>
                   <button 
-                    onClick={() => setShowDeleteConfirmation(true)}
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowDeleteConfirmation(true);
+                    }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-red-600 flex items-center gap-2"
                   >
                     <Trash size={16} />
@@ -141,7 +132,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
         )}
         
         <div className="flex justify-between items-center mt-3">
-          <div className="flex items-center gap-1 text-sm">
+          <div className="flex items-center gap-1 text-xs sm:text-sm">
             {dueDate ? (
               <>
                 {(() => {
@@ -149,7 +140,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
                   if (due === 'No due date') {
                     return (
                       <>
-                        <Calendar size={16} className="text-[#5f6368]" />
+                        <Calendar size={14} className="sm:w-4 sm:h-4 text-[#5f6368]" />
                         <span className="text-[#5f6368]">No due date</span>
                       </>
                     );
@@ -157,7 +148,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
                     const { formatted, isPastDue } = due;
                     return (
                       <>
-                        <Calendar size={16} className={isPastDue ? "text-red-500" : "text-[#5f6368]"} />
+                        <Calendar size={14} className={`sm:w-4 sm:h-4 ${isPastDue ? "text-red-500" : "text-[#5f6368]"}`} />
                         <span className={isPastDue ? "text-red-500" : "text-[#5f6368]"}>
                           Due {formatted}
                         </span>

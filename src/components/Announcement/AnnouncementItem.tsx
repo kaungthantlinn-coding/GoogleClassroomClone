@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Announcement, Comment, addComment, removeComment, deleteAnnouncement, updateAnnouncement } from '../../types/announcement';
-import { formatDistanceToNow } from 'date-fns';
-import { MoreVertical, Send, Edit, Trash, Copy, X, List, Bold, Italic, Underline, AlignLeft, StrikethroughIcon, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { MoreVertical, Edit, Trash, Copy, Users } from 'lucide-react';
 
 interface AnnouncementItemProps {
   announcement: Announcement;
@@ -24,7 +23,6 @@ const AnnouncementItem: React.FC<AnnouncementItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(announcement.content);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [isCommentFocused, setIsCommentFocused] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editedCommentContent, setEditedCommentContent] = useState('');
   const [activeCommentDropdown, setActiveCommentDropdown] = useState<string | null>(null);
@@ -39,13 +37,6 @@ const AnnouncementItem: React.FC<AnnouncementItemProps> = ({
   const isAuthor = currentUserId === announcement.authorId;
   const createdAt = new Date(announcement.createdAt);
   
-  // Format time as HH:MM AM/PM
-  const timeString = createdAt.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: true
-  });
-
   // Format date as "Yesterday" or the actual date if older
   const dateString = () => {
     const now = new Date();

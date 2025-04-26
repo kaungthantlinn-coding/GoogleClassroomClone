@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, NavLink, Link } from 'react-router-dom';
 import { 
   Home, 
@@ -11,12 +11,22 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
-  X
+  X,
+  Menu,
+  Plus
 } from 'lucide-react';
 
 interface SidebarProps {
   isCollapsed: boolean;
 }
+
+// Breakpoint values for responsive design
+const BREAKPOINTS = {
+  sm: 640,  // Small devices
+  md: 768,  // Medium devices
+  lg: 1024, // Large devices
+  xl: 1280  // Extra large devices
+};
 
 interface Class {
   id: string;
@@ -27,6 +37,10 @@ interface Class {
 }
 
 export default function Sidebar({ isCollapsed }: SidebarProps) {
+  // State to track screen size
+  const [isMobile, setIsMobile] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [teachingClasses, setTeachingClasses] = useState<Class[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newClass, setNewClass] = useState<Partial<Class>>({
@@ -140,18 +154,44 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       }
     };
     
+    // Function to check screen size and set mobile state
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < BREAKPOINTS.md);
+      // Auto-collapse sidebar on small screens
+      if (window.innerWidth < BREAKPOINTS.md) {
+        setIsSidebarVisible(false);
+      } else {
+        setIsSidebarVisible(true);
+      }
+    };
+    
+    // Check screen size on mount
+    checkScreenSize();
+    
     // Add event listeners
     window.addEventListener('storage', handleStorageEvent as EventListener);
     window.addEventListener('class-created', handleClassCreatedEvent as EventListener);
     window.addEventListener('class-removed', handleClassRemovedEvent as EventListener);
+    window.addEventListener('resize', checkScreenSize);
+    
+    // Handle clicks outside sidebar to close it on mobile
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isMobile && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setIsSidebarVisible(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
     
     // Return cleanup function
     return () => {
       window.removeEventListener('storage', handleStorageEvent as EventListener);
       window.removeEventListener('class-created', handleClassCreatedEvent as EventListener);
       window.removeEventListener('class-removed', handleClassRemovedEvent as EventListener);
+      window.removeEventListener('resize', checkScreenSize);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isMobile]);
 
   const [isTeachingOpen, setIsTeachingOpen] = useState(true);
   const [isEnrolledOpen, setIsEnrolledOpen] = useState(true);
@@ -174,7 +214,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     { icon: Settings, label: 'Settings', to: '/settings' },
   ];
 
-  // Function to get the cover image for a class
+  // Function to get the cover image for a class with responsive sizing
   const getCoverImageForClass = (classId: string, className: string): string => {
     // First try to get from localStorage class data
     const savedData = localStorage.getItem(`classData-${classId}`);
@@ -182,6 +222,10 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       try {
         const classData = JSON.parse(savedData);
         if (classData.coverImage) {
+          // If the saved image is from Unsplash, make it responsive
+          if (classData.coverImage.includes('unsplash.com')) {
+            return getResponsiveImageUrl(classData.coverImage);
+          }
           return classData.coverImage;
         }
       } catch (e) {
@@ -195,6 +239,10 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       try {
         const bannerImages = JSON.parse(savedBannerImages);
         if (bannerImages[classId]) {
+          // If the saved image is from Unsplash, make it responsive
+          if (bannerImages[classId].includes('unsplash.com')) {
+            return getResponsiveImageUrl(bannerImages[classId]);
+          }
           return bannerImages[classId];
         }
       } catch (e) {
@@ -214,7 +262,73 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       query = 'technology,cloud,computing';
     }
     
-    return `https://source.unsplash.com/random/1600x900/?${query}`;
+    // Get responsive image size based on screen width
+    const imageSize = getResponsiveImageSize();
+    return `https://source.unsplash.com/random/${imageSize}/?${query}`;
+  };
+  
+  // Helper function to determine responsive image size based on screen width
+  const getResponsiveImageSize = (): string => {
+    // Default size for larger screens
+    let size = '1600x900';
+    
+    // Check if window is available (client-side)
+    if (typeof window !== 'undefined') {
+      const width = window.innerWidth;
+      
+      if (width < BREAKPOINTS.sm) {
+        // Small mobile devices
+        size = '640x360';
+      } else if (width < BREAKPOINTS.md) {
+        // Larger mobile devices
+        size = '768x432';
+      } else if (width < BREAKPOINTS.lg) {
+        // Tablets
+        size = '1024x576';
+      } else if (width < BREAKPOINTS.xl) {
+        // Small desktops
+        size = '1280x720';
+      }
+    }
+    
+    return size;
+  };
+  
+  // Helper function to update existing Unsplash URLs to be responsive
+  const getResponsiveImageUrl = (url: string): string => {
+    // If it's not an Unsplash URL, return as is
+    if (!url.includes('unsplash.com')) return url;
+    
+    try {
+      // Get the appropriate size for the current device
+      const imageSize = getResponsiveImageSize();
+      
+      // If it's an Unsplash random URL, update the size
+      if (url.includes('unsplash.com/random')) {
+        // Extract the query parameters
+        const queryMatch = url.match(/\?(.+)$/);
+        const query = queryMatch ? queryMatch[1] : '';
+        
+        // Create a new URL with the updated size
+        return `https://source.unsplash.com/random/${imageSize}/${query ? '?' + query : ''}`;
+      }
+      
+      // For specific Unsplash images (not random), we can use the Unsplash API format
+      // Example: https://images.unsplash.com/photo-123456?w=1600&h=900
+      if (url.includes('images.unsplash.com')) {
+        // Remove any existing size parameters
+        const baseUrl = url.split('?')[0];
+        const [width, height] = imageSize.split('x');
+        
+        // Add new responsive size parameters
+        return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
+      }
+    } catch (e) {
+      console.error('Error creating responsive image URL', e);
+    }
+    
+    // Return original URL if any issues occur
+    return url;
   };
 
   const handleCreateClass = (e: React.FormEvent) => {
@@ -276,13 +390,75 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     }
   };
 
+  // Toggle sidebar visibility on mobile
+  const toggleMobileSidebar = () => {
+    setIsSidebarVisible(!isSidebarVisible);
+  };
+
+  // Function to open create class modal
+  const openCreateClassModal = () => {
+    setShowCreateModal(true);
+    // Close sidebar on mobile when opening modal
+    if (isMobile) {
+      setIsSidebarVisible(false);
+    }
+  };
+
   return (
     <>
+      {/* Mobile menu toggle button */}
+      {isMobile && (
+        <div className="fixed left-4 top-16 z-40">
+          <button 
+            onClick={toggleMobileSidebar}
+            className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100"
+            aria-label="Toggle sidebar"
+          >
+            <Menu size={24} className="text-[#3c4043]" />
+          </button>
+        </div>
+      )}
+      
+      {/* Mobile create class button */}
+      {isMobile && (
+        <div className="fixed right-4 bottom-4 z-40">
+          <button 
+            onClick={openCreateClassModal}
+            className="p-3 bg-[#1a73e8] rounded-full shadow-lg text-white hover:bg-[#1557b0] transition-colors"
+            aria-label="Create class"
+          >
+            <Plus size={24} />
+          </button>
+        </div>
+      )}
+
       <aside
-        className={`fixed left-0 top-0 h-full bg-white shadow-lg z-30 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}`}
+        ref={sidebarRef}
+        className={`fixed left-0 top-0 h-full bg-white shadow-lg z-30 flex flex-col transition-all duration-300 ${
+          isCollapsed && !isMobile ? 'w-[72px]' : 'w-[260px]'
+        } ${isMobile ? (isSidebarVisible ? 'translate-x-0' : '-translate-x-full') : ''}`}
         style={{ overflowY: 'auto' }}
       >
-        <nav className="py-3 px-2">
+        <nav className="py-3 px-2 relative">
+          {/* Non-mobile create class button */}
+          {!isMobile && !isCollapsed && (
+            <button
+              onClick={openCreateClassModal}
+              className="w-full flex items-center justify-center gap-2 my-2 py-2 px-4 bg-[#1a73e8] text-white rounded-md hover:bg-[#1557b0] transition-colors"
+            >
+              <Plus size={18} />
+              <span className="text-sm font-medium">Create class</span>
+            </button>
+          )}
+          {!isMobile && isCollapsed && (
+            <button
+              onClick={openCreateClassModal}
+              className="w-full flex items-center justify-center my-2 py-2 rounded-md hover:bg-[#f8f9fa] transition-colors"
+              title="Create class"
+            >
+              <Plus size={24} className="text-[#3c4043]" />
+            </button>
+          )}
           {navItems.map((item) => (
             <div key={item.to} className="relative">
               <NavLink
@@ -447,7 +623,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div 
-            className="bg-white w-full max-w-[500px] rounded-lg shadow-xl overflow-hidden"
+            className="bg-white w-full max-w-[500px] mx-4 rounded-lg shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b">
@@ -459,7 +635,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 <X size={20} className="text-[#5f6368]" />
               </button>
             </div>
-            <form onSubmit={handleCreateClass} className="p-6">
+            <form onSubmit={handleCreateClass} className="p-4 sm:p-6">
               <div className="space-y-4">
                 <div>
                   <input
@@ -484,12 +660,12 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Choose class color</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {['#4285f4', '#0f9d58', '#f4b400', '#db4437', '#673ab7', '#ff6d00', '#795548'].map(color => (
                       <button
                         key={color}
                         type="button"
-                        className={`w-6 h-6 rounded-full ${newClass.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
+                        className={`w-8 h-8 sm:w-6 sm:h-6 rounded-full ${newClass.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
                         style={{ backgroundColor: color }}
                         onClick={() => setNewClass({...newClass, color})}
                       />
@@ -497,18 +673,18 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
+                  className="w-full sm:w-auto px-6 py-3 sm:py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!newClass.name}
-                  className={`px-6 py-2 ${!newClass.name ? 'bg-gray-300 text-gray-500' : 'bg-[#1a73e8] text-white hover:bg-[#1557b0]'} rounded-md font-medium`}
+                  className={`w-full sm:w-auto px-6 py-3 sm:py-2 ${!newClass.name ? 'bg-gray-300 text-gray-500' : 'bg-[#1a73e8] text-white hover:bg-[#1557b0]'} rounded-md font-medium`}
                 >
                   Create
                 </button>

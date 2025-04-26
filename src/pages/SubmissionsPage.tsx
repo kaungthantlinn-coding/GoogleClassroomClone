@@ -422,32 +422,32 @@ const SubmissionsPage: React.FC = () => {
 
           {/* Submissions table */}
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h2 className="text-xl font-semibold">Submissions</h2>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
                 <Input
                   placeholder="Search by student name..."
                   value={searchTerm}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="max-w-xs"
+                  className="w-full sm:max-w-xs"
                 />
 
-                <Button variant="outline" onClick={handleGradeAll}>
+                <Button variant="outline" onClick={handleGradeAll} className="w-full sm:w-auto">
                   Grade All
                 </Button>
               </div>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="whitespace-nowrap">Student</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
+                    <TableHead className="whitespace-nowrap hidden md:table-cell">Submitted</TableHead>
+                    <TableHead className="whitespace-nowrap">Grade</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -463,6 +463,9 @@ const SubmissionsPage: React.FC = () => {
                         <TableCell>
                           <div className="font-medium">{submission.studentName}</div>
                           <div className="text-sm text-muted-foreground">ID: {submission.studentId}</div>
+                          <div className="text-xs text-gray-500 md:hidden mt-1">
+                            {submission.submittedDate || 'Not submitted'}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -477,10 +480,10 @@ const SubmissionsPage: React.FC = () => {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {submission.submittedDate || 'Not submitted'}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell>
                           {submission.status === 'graded' ? (
                             <span className="font-medium">{submission.grade} / {assignment.points}</span>
                           ) : (

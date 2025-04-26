@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect, useCallback } from 'react';
-import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, ChevronUp, Users, Upload, Link as LinkIcon } from 'lucide-react';
+import { useState, useContext, useEffect, useCallback } from 'react';
+import { FileText, Plus, HelpCircle, X, ChevronDown, ChevronUp, Users, Upload, Link as LinkIcon } from 'lucide-react';
 import { useLocation, useParams } from 'react-router-dom';
 import SelectClassModal from '../components/SelectClassModal';
 import ReusePostModal from '../components/ReusePostModal';
@@ -11,8 +11,8 @@ import MaterialCard from '../components/MaterialCard';
 import { ClassDataContext } from './ClassPage';
 import { AssignmentData } from '../components/AssignmentModal';
 import { MaterialData } from '../components/MaterialModal';
-import { Assignment, getClassAssignments, saveAssignment, deleteAssignment } from '../types/assignment';
-import { Material, getClassMaterials, saveMaterial, deleteMaterial } from '../types/material';
+import { Assignment, getClassAssignments, deleteAssignment } from '../types/assignment';
+import { Material, getClassMaterials, deleteMaterial } from '../types/material';
 
 const ClassworkPage = () => {
   const classData = useContext(ClassDataContext);
@@ -25,10 +25,6 @@ const ClassworkPage = () => {
   const [showSelectClassModal, setShowSelectClassModal] = useState(false);
   const [showReusePostModal, setShowReusePostModal] = useState(false);
   const [showAddTopicModal, setShowAddTopicModal] = useState(false);
-  const [selectedClass, setSelectedClass] = useState(classData.className || 'Class');
-  const [points, setPoints] = useState('100');
-  const [dueDate, setDueDate] = useState('No due date');
-  const [answerType, setAnswerType] = useState('Short answer');
   const [studentsCanReply, setStudentsCanReply] = useState(true);
   const [studentsCanEdit, setStudentsCanEdit] = useState(false);
   const { classId } = useParams<{ classId: string }>();
@@ -117,7 +113,7 @@ const ClassworkPage = () => {
   };
   
   // Group assignments and materials by topic
-  const itemsByTopic: {[key: string]: (Assignment | Material)[]} = {};
+  const itemsByTopic: { [key: string]: (Assignment | Material)[] } = {};
   
   // Add assignments to topics
   assignments.forEach(assignment => {
@@ -172,12 +168,12 @@ const ClassworkPage = () => {
     setIsCreateMenuOpen(false);
   };
 
-  const handleSelectClass = (classId: string) => {
+  const handleSelectClass = () => {
     setShowSelectClassModal(false);
     setShowReusePostModal(true);
   };
 
-  const handleReusePost = (postId: string) => {
+  const handleReusePost = () => {
     // Handle reusing the post here
     setShowReusePostModal(false);
     // You would typically make an API call to copy the post to the current class
@@ -188,7 +184,7 @@ const ClassworkPage = () => {
     console.log('New topic:', newTopic);
   };
 
-  const handleAssignmentSubmit = useCallback((assignmentData: AssignmentData, editId?: string) => {
+  const handleAssignmentSubmit = useCallback((assignmentData: AssignmentData) => {
     console.log('Assignment data:', assignmentData);
     
     // The actual saving is now handled in the AssignmentModal component
@@ -241,7 +237,7 @@ const ClassworkPage = () => {
   };
 
   // Handle material submission
-  const handleMaterialSubmit = useCallback((materialData: MaterialData, editId?: string) => {
+  const handleMaterialSubmit = useCallback((materialData: MaterialData) => {
     console.log('Material data:', materialData);
     
     // The actual saving is handled in the MaterialModal component
@@ -253,21 +249,21 @@ const ClassworkPage = () => {
   }, [closeAllForms]);
 
   return (
-    <div className="max-w-[1000px] mx-auto px-6 py-6">
+    <div className="max-w-[1000px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6">
 
       {/* Create Button */}
-      <div className="relative mb-6">
+      <div className="relative mb-4 sm:mb-6">
         <button
           onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-          className="flex items-center gap-2 px-6 py-2 bg-[#1a73e8] text-white rounded-full text-sm font-medium hover:bg-[#1557b0] transition-colors"
+          className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-1.5 sm:py-2 bg-[#1a73e8] text-white rounded-full text-xs sm:text-sm font-medium hover:bg-[#1557b0] transition-colors"
         >
-          <Plus size={20} />
+          <Plus size={16} className="sm:w-5 sm:h-5" />
           Create
         </button>
 
         {/* Create Menu Dropdown */}
         {isCreateMenuOpen && (
-          <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+          <div className="absolute top-full left-0 mt-1 w-56 sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
             <button 
               onClick={() => {
                 setCurrentEditingAssignment(null); // Ensure we're creating a new assignment
@@ -277,9 +273,9 @@ const ClassworkPage = () => {
                 setShowMaterialForm(false);
                 setIsCreateMenuOpen(false);
               }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
+              className="w-full px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3 hover:bg-gray-50 text-xs sm:text-sm"
             >
-              <FileText size={20} className="text-gray-600" />
+              <FileText size={16} className="sm:w-5 sm:h-5 text-gray-600" />
               Assignment
             </button>
             <button 
@@ -290,9 +286,9 @@ const ClassworkPage = () => {
                 setShowQuestionForm(false);
                 setIsCreateMenuOpen(false);
               }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
+              className="w-full px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3 hover:bg-gray-50 text-xs sm:text-sm"
             >
-              <FileText size={20} className="text-gray-600" />
+              <FileText size={16} className="sm:w-5 sm:h-5 text-gray-600" />
               Material
             </button>
           </div>
@@ -325,27 +321,27 @@ const ClassworkPage = () => {
 
       {/* Classwork List or Empty State */}
       {(assignments.length > 0 || materials.length > 0) ? (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {sortedTopics.map((topic) => (
             <div key={topic} className="border border-gray-200 rounded-lg overflow-hidden">
               {/* Topic Header */}
               <div 
-                className="flex justify-between items-center p-4 bg-white cursor-pointer"
+                className="flex justify-between items-center p-3 sm:p-4 bg-white cursor-pointer"
                 onClick={() => toggleTopic(topic)}
               >
                 <div>
-                  <h2 className="text-xl font-medium">{topic}</h2>
+                  <h2 className="text-base sm:text-lg md:text-xl font-medium">{topic}</h2>
                 </div>
-                <button className="p-2 hover:bg-gray-100 rounded-full" onClick={e => { e.stopPropagation(); toggleTopic(topic); }}>
+                <button className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full" onClick={e => { e.stopPropagation(); toggleTopic(topic); }}>
                   {expandedTopics[topic] ? (
-                    <ChevronUp size={20} className="text-gray-500" />
+                    <ChevronUp size={18} className="sm:w-5 sm:h-5 text-gray-500" />
                   ) : (
-                    <ChevronDown size={20} className="text-gray-500" />
+                    <ChevronDown size={18} className="sm:w-5 sm:h-5 text-gray-500" />
                   )}
                 </button>
               </div>
               {expandedTopics[topic] && (
-                <div className="p-4 space-y-4 bg-white">
+                <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-white">
                   {itemsByTopic[topic].map((item) => {
                     // Check if the item is an assignment (has 'instructions' property)
                     if ('instructions' in item) {
@@ -387,27 +383,27 @@ const ClassworkPage = () => {
         // Empty State
         !showAssignmentForm && !showQuizForm && !showQuestionForm && !showMaterialForm && (
           <div className="bg-white rounded-lg border border-gray-200">
-            <div className="flex flex-col items-center py-16">
+            <div className="flex flex-col items-center py-8 sm:py-12 md:py-16 px-4">
               <img
                 src="/classwork-empty.svg"
                 alt="Empty classwork"
-                className="w-[240px] h-[240px] mb-6"
+                className="w-[160px] h-[160px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] mb-4 sm:mb-6"
               />
               {location.state && location.state.fromAssignment ? (
                 <>
-                  <h2 className="text-[22px] text-[#3c4043] font-normal mb-1">
+                  <h2 className="text-lg sm:text-xl md:text-[22px] text-[#3c4043] font-normal mb-1 text-center">
                     The assignment you were viewing could not be found
                   </h2>
-                  <p className="text-[#5f6368] text-[14px] text-center">
+                  <p className="text-[#5f6368] text-xs sm:text-sm md:text-[14px] text-center">
                     Create a new assignment by clicking the Create button above
                   </p>
                 </>
               ) : (
                 <>
-                  <h2 className="text-[22px] text-[#3c4043] font-normal mb-1">
+                  <h2 className="text-lg sm:text-xl md:text-[22px] text-[#3c4043] font-normal mb-1 text-center">
                     This is where you'll assign work
                   </h2>
-                  <p className="text-[#5f6368] text-[14px] text-center">
+                  <p className="text-[#5f6368] text-xs sm:text-sm md:text-[14px] text-center">
                     You can add assignments and other work for the class, then organize it into topics
                   </p>
                 </>
@@ -446,7 +442,7 @@ const ClassworkPage = () => {
             <div className="flex p-6">
               {/* Left side - Assignment form */}
               <div className="flex-1 pr-6">
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <input
                     type="text"
                     placeholder="Title"
@@ -540,7 +536,7 @@ const ClassworkPage = () => {
                 <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
                   <h3 className="text-sm font-medium text-[#3c4043] mb-4">For</h3>
                   <button className="w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center justify-between">
-                    <span>{selectedClass}</span>
+                    <span>{classData.className}</span>
                     <ChevronDown size={16} className="text-[#5f6368]" />
                   </button>
                   <button className="mt-3 w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center gap-2 text-[#1a73e8]">
@@ -553,13 +549,13 @@ const ClassworkPage = () => {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-[#3c4043]">Points</h3>
                     <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {points}
+                      100
                     </button>
                   </div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-[#3c4043]">Due</h3>
                     <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {dueDate}
+                      No due date
                     </button>
                   </div>
                 </div>
@@ -603,7 +599,7 @@ const ClassworkPage = () => {
             <div className="flex p-6">
               {/* Left side - Question form */}
               <div className="flex-1 pr-6">
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <div className="flex gap-6">
                     <input
                       type="text"
@@ -611,7 +607,7 @@ const ClassworkPage = () => {
                       className="flex-1 px-3 py-4 text-[#3c4043] placeholder-[#5f6368] bg-[#f8f9fa] rounded-t border-b border-[#e0e0e0] focus:outline-none text-[16px]"
                     />
                     <button className="w-[200px] px-3 py-4 text-[#3c4043] bg-[#f8f9fa] rounded-t border-b border-[#e0e0e0] flex items-center justify-between">
-                      <span className="text-sm">{answerType}</span>
+                      <span className="text-sm">Short answer</span>
                       <ChevronDown size={16} className="text-[#5f6368]" />
                     </button>
                   </div>
@@ -673,7 +669,7 @@ const ClassworkPage = () => {
                 <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
                   <h3 className="text-sm font-medium text-[#3c4043] mb-4">For</h3>
                   <button className="w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center justify-between">
-                    <span>{selectedClass}</span>
+                    <span>{classData.className}</span>
                     <ChevronDown size={16} className="text-[#5f6368]" />
                   </button>
                   <button className="mt-3 w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center gap-2 text-[#1a73e8]">
@@ -686,13 +682,13 @@ const ClassworkPage = () => {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-[#3c4043]">Points</h3>
                     <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {points}
+                      100
                     </button>
                   </div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-[#3c4043]">Due</h3>
                     <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {dueDate}
+                      No due date
                     </button>
                   </div>
                 </div>
@@ -734,7 +730,7 @@ const ClassworkPage = () => {
       <ReusePostModal
         isOpen={showReusePostModal}
         onClose={() => setShowReusePostModal(false)}
-        selectedClass={selectedClass}
+        selectedClass={classData.className || ''}
         onReuse={handleReusePost}
       />
 
