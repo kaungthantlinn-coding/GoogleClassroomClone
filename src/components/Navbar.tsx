@@ -93,7 +93,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-white border-b">
+    <nav className="fixed top-0 left-0 w-full z-40 bg-white shadow transition-all duration-300">
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-4">
           <button 

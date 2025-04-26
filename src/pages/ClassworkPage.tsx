@@ -1,14 +1,18 @@
 import React, { useState, useContext, useEffect, useCallback } from 'react';
-import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, Users, Upload, Link as LinkIcon } from 'lucide-react';
+import { FileText, Plus, HelpCircle, RotateCcw, List, X, ChevronDown, ChevronUp, Users, Upload, Link as LinkIcon } from 'lucide-react';
 import { useLocation, useParams } from 'react-router-dom';
 import SelectClassModal from '../components/SelectClassModal';
 import ReusePostModal from '../components/ReusePostModal';
 import AddTopicModal from '../components/AddTopicModal';
 import AssignmentModal from '../components/AssignmentModal';
+import MaterialModal from '../components/MaterialModal';
 import AssignmentCard from '../components/AssignmentCard';
+import MaterialCard from '../components/MaterialCard';
 import { ClassDataContext } from './ClassPage';
 import { AssignmentData } from '../components/AssignmentModal';
+import { MaterialData } from '../components/MaterialModal';
 import { Assignment, getClassAssignments, saveAssignment, deleteAssignment } from '../types/assignment';
+import { Material, getClassMaterials, saveMaterial, deleteMaterial } from '../types/material';
 
 const ClassworkPage = () => {
   const classData = useContext(ClassDataContext);
@@ -24,35 +28,78 @@ const ClassworkPage = () => {
   const [selectedClass, setSelectedClass] = useState(classData.className || 'Class');
   const [points, setPoints] = useState('100');
   const [dueDate, setDueDate] = useState('No due date');
-  const [topic, setTopic] = useState('No topic');
   const [answerType, setAnswerType] = useState('Short answer');
   const [studentsCanReply, setStudentsCanReply] = useState(true);
   const [studentsCanEdit, setStudentsCanEdit] = useState(false);
   const { classId } = useParams<{ classId: string }>();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   
-  // Load assignments for this class
+  // State for editing
+  const [currentEditingAssignment, setCurrentEditingAssignment] = useState<string | null>(null);
+  const [currentEditingMaterial, setCurrentEditingMaterial] = useState<string | null>(null);
+
+  // --- Topic toggle state ---
+  const [expandedTopics, setExpandedTopics] = useState<{ [key: string]: boolean }>({});
+
+  // Load assignments and materials for this class
   useEffect(() => {
     if (classId) {
       loadAssignments();
+      loadMaterials();
       
       // Listen for assignment updates
       const handleAssignmentUpdate = () => {
         loadAssignments();
       };
       
+      // Listen for material updates
+      const handleMaterialUpdate = () => {
+        loadMaterials();
+      };
+      
+      // Add event listeners
       window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
       window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
       window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
       
+      window.addEventListener('materialUpdated', handleMaterialUpdate);
+      window.addEventListener('materialDeleted', handleMaterialUpdate);
+      window.addEventListener('newMaterialCreated', handleMaterialUpdate);
+      
       return () => {
+        // Remove event listeners
         window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
         window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
         window.removeEventListener('newAssignmentCreated', handleAssignmentUpdate);
+        
+        window.removeEventListener('materialUpdated', handleMaterialUpdate);
+        window.removeEventListener('materialDeleted', handleMaterialUpdate);
+        window.removeEventListener('newMaterialCreated', handleMaterialUpdate);
       };
     }
   }, [classId]);
-  
+
+  // Update expanded topics on assignments/materials change
+  useEffect(() => {
+    const allTopics = Object.keys(itemsByTopic);
+    setExpandedTopics((prev) => {
+      const nextState = { ...prev };
+      allTopics.forEach((topic) => {
+        if (!(topic in nextState)) nextState[topic] = true;
+      });
+      // Remove topics that no longer exist
+      Object.keys(nextState).forEach((topic) => {
+        if (!allTopics.includes(topic)) delete nextState[topic];
+      });
+      return nextState;
+    });
+  }, [assignments, materials]);
+
+  const toggleTopic = (topic: string) => {
+    setExpandedTopics((prev) => ({ ...prev, [topic]: !prev[topic] }));
+  };
+
   // Function to load assignments
   const loadAssignments = () => {
     if (classId) {
@@ -60,7 +107,38 @@ const ClassworkPage = () => {
       setAssignments(classAssignments);
     }
   };
-  const [currentEditingAssignment, setCurrentEditingAssignment] = useState<string | null>(null);
+  
+  // Function to load materials
+  const loadMaterials = () => {
+    if (classId) {
+      const classMaterials = getClassMaterials(classId);
+      setMaterials(classMaterials);
+    }
+  };
+  
+  // Group assignments and materials by topic
+  const itemsByTopic: {[key: string]: (Assignment | Material)[]} = {};
+  
+  // Add assignments to topics
+  assignments.forEach(assignment => {
+    const topic = assignment.topic || 'No topic';
+    if (!itemsByTopic[topic]) {
+      itemsByTopic[topic] = [];
+    }
+    itemsByTopic[topic].push(assignment);
+  });
+  
+  // Add materials to topics
+  materials.forEach(material => {
+    const topic = material.topic || 'No topic';
+    if (!itemsByTopic[topic]) {
+      itemsByTopic[topic] = [];
+    }
+    itemsByTopic[topic].push(material);
+  });
+  
+  // Sort topics to ensure consistent order
+  const sortedTopics = Object.keys(itemsByTopic).sort();
 
   // Update document title when class data changes
   useEffect(() => {
@@ -137,11 +215,42 @@ const ClassworkPage = () => {
     setAssignments(assignments.filter(assignment => assignment.id !== id));
   };
 
+  const handleEditMaterial = (id: string) => {
+    setCurrentEditingMaterial(id);
+    setShowMaterialForm(true);
+  };
+
+  const handleDeleteMaterial = (id: string) => {
+    // Delete the material using our utility function
+    deleteMaterial(id);
+    
+    // Update the local state
+    setMaterials(materials.filter(material => material.id !== id));
+  };
+
   // Get the current assignment being edited
   const getCurrentAssignment = () => {
     if (!currentEditingAssignment) return null;
     return assignments.find(a => a.id === currentEditingAssignment) || null;
   };
+
+  // Get the current material being edited
+  const getCurrentMaterial = () => {
+    if (!currentEditingMaterial) return null;
+    return materials.find(m => m.id === currentEditingMaterial) || null;
+  };
+
+  // Handle material submission
+  const handleMaterialSubmit = useCallback((materialData: MaterialData, editId?: string) => {
+    console.log('Material data:', materialData);
+    
+    // The actual saving is handled in the MaterialModal component
+    // using our utility functions, so we just need to close the forms
+    closeAllForms();
+    
+    // Reload materials to reflect changes
+    loadMaterials();
+  }, [closeAllForms]);
 
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-6">
@@ -175,32 +284,6 @@ const ClassworkPage = () => {
             </button>
             <button 
               onClick={() => {
-                setShowQuizForm(true);
-                setShowAssignmentForm(false);
-                setShowQuestionForm(false);
-                setShowMaterialForm(false);
-                setIsCreateMenuOpen(false);
-              }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
-            >
-              <FileText size={20} className="text-gray-600" />
-              Quiz assignment
-            </button>
-            <button 
-              onClick={() => {
-                setShowQuestionForm(true);
-                setShowAssignmentForm(false);
-                setShowQuizForm(false);
-                setShowMaterialForm(false);
-                setIsCreateMenuOpen(false);
-              }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
-            >
-              <HelpCircle size={20} className="text-gray-600" />
-              Question
-            </button>
-            <button 
-              onClick={() => {
                 setShowMaterialForm(true);
                 setShowAssignmentForm(false);
                 setShowQuizForm(false);
@@ -211,27 +294,6 @@ const ClassworkPage = () => {
             >
               <FileText size={20} className="text-gray-600" />
               Material
-            </button>
-            <button 
-              onClick={() => {
-                setShowSelectClassModal(true);
-                setIsCreateMenuOpen(false);
-              }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
-            >
-              <RotateCcw size={20} className="text-gray-600" />
-              Reuse post
-            </button>
-            <div className="border-t border-gray-200 my-2"></div>
-            <button 
-              onClick={() => {
-                setShowAddTopicModal(true);
-                setIsCreateMenuOpen(false);
-              }}
-              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-50 text-sm"
-            >
-              <List size={20} className="text-gray-600" />
-              Topic
             </button>
           </div>
         )}
@@ -249,21 +311,76 @@ const ClassworkPage = () => {
         assignmentToEdit={getCurrentAssignment()}
       />
 
-      {/* Assignment List or Empty State */}
-      {assignments.length > 0 ? (
-        <div className="space-y-4">
-          {assignments.map((assignment) => (
-            <AssignmentCard 
-              key={assignment.id}
-              id={assignment.id}
-              title={assignment.title}
-              description={assignment.instructions}
-              points={assignment.points}
-              dueDate={assignment.dueDate ? assignment.dueDate : ''}
-              isOverdue={!!assignment.dueDate}
-              onEdit={handleEditAssignment}
-              onDelete={handleDeleteAssignment}
-            />
+      {/* Material Modal */}
+      <MaterialModal 
+        isOpen={showMaterialForm}
+        onClose={() => {
+          setShowMaterialForm(false);
+          setCurrentEditingMaterial(null);
+        }}
+        onSubmit={handleMaterialSubmit}
+        className={classData.className}
+        materialToEdit={getCurrentMaterial()}
+      />
+
+      {/* Classwork List or Empty State */}
+      {(assignments.length > 0 || materials.length > 0) ? (
+        <div className="space-y-6">
+          {sortedTopics.map((topic) => (
+            <div key={topic} className="border border-gray-200 rounded-lg overflow-hidden">
+              {/* Topic Header */}
+              <div 
+                className="flex justify-between items-center p-4 bg-white cursor-pointer"
+                onClick={() => toggleTopic(topic)}
+              >
+                <div>
+                  <h2 className="text-xl font-medium">{topic}</h2>
+                </div>
+                <button className="p-2 hover:bg-gray-100 rounded-full" onClick={e => { e.stopPropagation(); toggleTopic(topic); }}>
+                  {expandedTopics[topic] ? (
+                    <ChevronUp size={20} className="text-gray-500" />
+                  ) : (
+                    <ChevronDown size={20} className="text-gray-500" />
+                  )}
+                </button>
+              </div>
+              {expandedTopics[topic] && (
+                <div className="p-4 space-y-4 bg-white">
+                  {itemsByTopic[topic].map((item) => {
+                    // Check if the item is an assignment (has 'instructions' property)
+                    if ('instructions' in item) {
+                      const assignment = item as Assignment;
+                      return (
+                        <AssignmentCard 
+                          key={assignment.id}
+                          id={assignment.id}
+                          title={assignment.title}
+                          description={assignment.instructions}
+                          points={assignment.points}
+                          dueDate={assignment.dueDate ? assignment.dueDate : ''}
+                          onEdit={handleEditAssignment}
+                          onDelete={handleDeleteAssignment}
+                        />
+                      );
+                    } else {
+                      // It's a material
+                      const material = item as Material;
+                      return (
+                        <MaterialCard 
+                          key={material.id}
+                          id={material.id}
+                          title={material.title}
+                          description={material.description}
+                          attachments={material.attachments}
+                          onEdit={handleEditMaterial}
+                          onDelete={handleDeleteMaterial}
+                        />
+                      );
+                    }
+                  })}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       ) : (
@@ -300,119 +417,7 @@ const ClassworkPage = () => {
         )
       )}
 
-      {/* Material Form */}
-      {showMaterialForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-16 z-50">
-          <div className="bg-white w-full max-w-[1000px] rounded-lg h-[calc(100vh-100px)] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setShowMaterialForm(false)}>
-                  <X size={24} className="text-[#5f6368]" />
-                </button>
-                <div className="flex items-center gap-3">
-                  <FileText className="text-[#5f6368]" size={24} />
-                  <h1 className="text-[32px] text-[#3c4043] font-normal">Material</h1>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="px-6 py-2 text-sm text-[#444746] hover:bg-[#f8f9fa] rounded">
-                  Cancel
-                </button>
-                <button className="px-6 py-2 text-sm bg-[#1a73e8] text-white rounded hover:bg-[#1557b0] font-medium">
-                  Post
-                </button>
-              </div>
-            </div>
-
-            <div className="flex p-6">
-              {/* Left side - Material form */}
-              <div className="flex-1 pr-6">
-                <div className="space-y-6">
-                  <input
-                    type="text"
-                    placeholder="Title"
-                    className="w-full px-3 py-4 text-[#3c4043] placeholder-[#5f6368] bg-[#f8f9fa] rounded-t border-b border-[#e0e0e0] focus:outline-none text-[16px]"
-                  />
-
-                  <div className="bg-[#f8f9fa] p-4 rounded">
-                    <textarea
-                      placeholder="Description (optional)"
-                      className="w-full min-h-[100px] bg-transparent placeholder-[#5f6368] focus:outline-none resize-none text-[14px]"
-                    />
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      <div className="flex items-center gap-1">
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="font-bold">B</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="italic">I</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="underline">U</span>
-                        </button>
-                        <button className="p-2 hover:bg-[#edf2fa] rounded">
-                          <span className="text-[#5f6368]">≡</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Attach Section */}
-                  <div>
-                    <h3 className="text-sm text-[#3c4043] mb-4">Attach</h3>
-                    <div className="flex gap-4">
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/drive-icon.svg" alt="Drive" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Drive</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/youtube-icon.svg" alt="YouTube" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">YouTube</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <Plus size={24} className="text-[#5f6368]" />
-                        <span className="text-xs text-[#5f6368]">Create</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/upload-icon.svg" alt="Upload" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Upload</span>
-                      </button>
-                      <button className="flex flex-col items-center gap-1 p-4 hover:bg-[#f8f9fa] rounded">
-                        <img src="/link-icon.svg" alt="Link" className="w-6 h-6" />
-                        <span className="text-xs text-[#5f6368]">Link</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right side - Material settings */}
-              <div className="w-[300px] space-y-4">
-                <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-[#3c4043] mb-4">For</h3>
-                  <button className="w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center justify-between">
-                    <span>{selectedClass}</span>
-                    <ChevronDown size={16} className="text-[#5f6368]" />
-                  </button>
-                  <button className="mt-3 w-full px-3 py-2 text-sm border rounded hover:bg-[#f8f9fa] flex items-center gap-2 text-[#1a73e8]">
-                    <Users size={16} />
-                    All students
-                  </button>
-                </div>
-
-                <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-[#3c4043]">Topic</h3>
-                    <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {topic}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Quiz and Question Forms would go here */}
 
       {/* Quiz Assignment Form */}
       {showQuizForm && (
@@ -557,12 +562,6 @@ const ClassworkPage = () => {
                       {dueDate}
                     </button>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-[#3c4043]">Topic</h3>
-                    <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {topic}
-                    </button>
-                  </div>
                 </div>
 
                 <div>
@@ -694,12 +693,6 @@ const ClassworkPage = () => {
                     <h3 className="text-sm font-medium text-[#3c4043]">Due</h3>
                     <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
                       {dueDate}
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-[#3c4043]">Topic</h3>
-                    <button className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded">
-                      {topic}
                     </button>
                   </div>
                 </div>

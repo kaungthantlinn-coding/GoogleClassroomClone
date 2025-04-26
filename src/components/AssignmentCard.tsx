@@ -8,7 +8,6 @@ interface AssignmentCardProps {
   description?: string;
   points: string;
   dueDate: string;
-  isOverdue?: boolean;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -19,7 +18,6 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   description,
   points,
   dueDate,
-  isOverdue = false,
   onEdit,
   onDelete
 }) => {
@@ -79,11 +77,19 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
     if (!dateString) return 'No due date';
     
     const dateObj = new Date(dateString);
-    return dateObj.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+    const now = new Date();
+    
+    // Check if the date is in the past
+    const isPastDue = dateObj < now && dateObj.toDateString() !== now.toDateString();
+    
+    return {
+      formatted: dateObj.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      }),
+      isPastDue
+    };
   };
 
   return (
@@ -96,7 +102,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
           </div>
           <div className="flex items-center gap-3">
             <div className="text-[#1a73e8] font-medium">
-              {points} pts
+              {points} points
             </div>
             <div className="relative">
               <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-gray-100 rounded-full">
@@ -136,10 +142,36 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
         
         <div className="flex justify-between items-center mt-3">
           <div className="flex items-center gap-1 text-sm">
-            <Calendar size={16} className={isOverdue ? "text-red-500" : "text-[#5f6368]"} />
-            <span className={isOverdue ? "text-red-500" : "text-[#5f6368]"}>
-              {dueDate ? `Due ${formatDueDate(dueDate)}` : 'No due date'}
-            </span>
+            {dueDate ? (
+              <>
+                {(() => {
+                  const due = formatDueDate(dueDate);
+                  if (due === 'No due date') {
+                    return (
+                      <>
+                        <Calendar size={16} className="text-[#5f6368]" />
+                        <span className="text-[#5f6368]">No due date</span>
+                      </>
+                    );
+                  } else {
+                    const { formatted, isPastDue } = due;
+                    return (
+                      <>
+                        <Calendar size={16} className={isPastDue ? "text-red-500" : "text-[#5f6368]"} />
+                        <span className={isPastDue ? "text-red-500" : "text-[#5f6368]"}>
+                          Due {formatted}
+                        </span>
+                      </>
+                    );
+                  }
+                })()} 
+              </>
+            ) : (
+              <>
+                <Calendar size={16} className="text-[#5f6368]" />
+                <span className="text-[#5f6368]">No due date</span>
+              </>
+            )}
           </div>
           
           <button 
@@ -186,4 +218,4 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   );
 };
 
-export default AssignmentCard; 
+export default AssignmentCard;

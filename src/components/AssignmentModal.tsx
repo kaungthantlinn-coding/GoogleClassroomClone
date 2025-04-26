@@ -25,6 +25,8 @@ export interface AssignmentData {
   rubric?: {
     criteria: { description: string; points: number }[];
   };
+  allowLateSubmissions?: boolean;
+  lateSubmissionPolicy?: string;
 }
 
 interface Attachment {
@@ -55,8 +57,14 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
   const [gradeCategory, setGradeCategory] = useState('');
   const [showGradeCategories, setShowGradeCategories] = useState(false);
   const [gradeCategories] = useState(['Homework', 'Classwork', 'Test', 'Quiz', 'Project']);
-  const [showSchedulingOptions, setShowSchedulingOptions] = useState(false);
-  const [allowLateSubmissions, setAllowLateSubmissions] = useState(true);
+  const [showSchedulingOptions, setShowSchedulingOptions] = useState(true); // Show by default for better discoverability
+  const [allowLateSubmissions, setAllowLateSubmissions] = useState(() => {
+    const savedSetting = localStorage.getItem('allowLateSubmissions');
+    return savedSetting ? savedSetting === 'true' : true;
+  });
+  const [lateSubmissionPolicy, setLateSubmissionPolicy] = useState(() => {
+    return localStorage.getItem('lateSubmissionPolicy') || 'mark';
+  });
   const [showPointsDropdown, setShowPointsDropdown] = useState(false);
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [topics, setTopics] = useState(() => {
@@ -93,6 +101,19 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       setScheduledFor(assignmentToEdit.scheduledFor);
       setGradeCategory(assignmentToEdit.gradeCategory || '');
       
+      // Load late submission settings if they exist
+      if (assignmentToEdit.allowLateSubmissions !== undefined) {
+        setAllowLateSubmissions(assignmentToEdit.allowLateSubmissions);
+      }
+      if (assignmentToEdit.lateSubmissionPolicy) {
+        setLateSubmissionPolicy(assignmentToEdit.lateSubmissionPolicy);
+      }
+      
+      // Show advanced options if scheduled date or late submissions are configured
+      if (assignmentToEdit.scheduledFor || assignmentToEdit.allowLateSubmissions !== undefined) {
+        setShowSchedulingOptions(true);
+      }
+      
       if (assignmentToEdit.rubric) {
         setIsCreatingRubric(true);
         setRubric(assignmentToEdit.rubric);
@@ -105,12 +126,22 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       const savedTopic = localStorage.getItem('lastSelectedTopic');
       const savedScheduledDate = localStorage.getItem('scheduledPostDate');
       const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
+      const savedLateSubmissionPolicy = localStorage.getItem('lateSubmissionPolicy');
       const savedTopicsList = localStorage.getItem('topicsList');
       
       // Initialize form with saved values if they exist
       if (savedTopic) setTopic(savedTopic);
-      if (savedScheduledDate) setScheduledFor(savedScheduledDate);
-      if (savedAllowLateSubmissions) setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+      if (savedScheduledDate) {
+        setScheduledFor(savedScheduledDate);
+        setShowSchedulingOptions(true); // Show advanced options if there's a scheduled date
+      }
+      if (savedAllowLateSubmissions) {
+        setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+        setShowSchedulingOptions(true); // Show advanced options if there are late submission settings
+      }
+      if (savedLateSubmissionPolicy) {
+        setLateSubmissionPolicy(savedLateSubmissionPolicy);
+      }
       if (savedTopicsList) {
         try {
           const parsedTopics = JSON.parse(savedTopicsList);
@@ -172,7 +203,9 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       assignTo,
       scheduledFor,
       gradeCategory,
-      rubric: isCreatingRubric ? rubric : undefined
+      rubric: isCreatingRubric ? rubric : undefined,
+      allowLateSubmissions,
+      lateSubmissionPolicy
     };
 
     if (assignmentToEdit) {
@@ -820,7 +853,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                     <h4 className="text-sm text-[#3c4043] mb-2">Schedule to post</h4>
                     <div className="flex">
                       <input 
-                        type="date" 
+                        type="datetime-local" 
                         value={scheduledFor || ''}
                         onChange={(e) => {
                           setScheduledFor(e.target.value);
@@ -846,7 +879,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                     </div>
                     <p className="text-xs text-[#5f6368] mt-1">
                       {scheduledFor 
-                        ? `This assignment will be posted on ${new Date(scheduledFor).toLocaleDateString()}`
+                        ? `This assignment will be posted on ${new Date(scheduledFor).toLocaleString()}`
                         : 'This assignment will be posted immediately'}
                     </p>
                   </div>
@@ -873,15 +906,16 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                     </div>
                     {allowLateSubmissions && (
                       <div className="flex items-center gap-2 mt-2">
-                        <div className="relative flex items-center">
+                        <div className="relative flex items-center w-full">
                           <AlertCircle size={16} className="absolute left-2 text-[#5f6368]" />
                           <select 
-                            className="pl-8 pr-3 py-2 text-sm border rounded focus:outline-none appearance-none bg-[#f8f9fa]"
+                            className="w-full pl-8 pr-3 py-2 text-sm border rounded focus:outline-none appearance-none bg-[#f8f9fa]"
                             onChange={(e) => {
-                              // Save late submission policy to localStorage
+                              // Update state and save to localStorage
+                              setLateSubmissionPolicy(e.target.value);
                               localStorage.setItem('lateSubmissionPolicy', e.target.value);
                             }}
-                            defaultValue={localStorage.getItem('lateSubmissionPolicy') || 'mark'}
+                            value={lateSubmissionPolicy}
                             data-testid="late-submission-policy"
                           >
                             <option value="mark">Mark as late</option>

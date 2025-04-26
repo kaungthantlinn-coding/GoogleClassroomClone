@@ -278,7 +278,10 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
   return (
     <>
-      <aside className={`${isCollapsed ? 'w-[72px]' : 'w-[280px]'} bg-white min-h-[calc(100vh-64px)] border-r overflow-y-auto`}>
+      <aside
+        className={`fixed left-0 top-0 h-full bg-white shadow-lg z-30 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}`}
+        style={{ overflowY: 'auto' }}
+      >
         <nav className="py-3 px-2">
           {navItems.map((item) => (
             <div key={item.to} className="relative">
@@ -299,7 +302,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           <div className="mt-2">
             <button
               onClick={() => !isCollapsed && setIsTeachingOpen(!isTeachingOpen)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-3' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
             >
               <GraduationCap size={24} strokeWidth={1.5} />
               {!isCollapsed && (
@@ -320,7 +323,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `flex items-center ${isCollapsed ? 'justify-center px-3' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
+                      `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
                         isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
                       }`
                     }
@@ -387,7 +390,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           <div className="mt-2">
             <button
               onClick={() => !isCollapsed && setIsEnrolledOpen(!isEnrolledOpen)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-3' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
             >
               <BookOpen size={24} strokeWidth={1.5} />
               {!isCollapsed && (
@@ -408,7 +411,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `flex items-center ${isCollapsed ? 'justify-center px-3' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
+                      `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
                         isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
                       }`
                     }
@@ -427,7 +430,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center ${isCollapsed ? 'justify-center px-3' : 'gap-4 px-6'} py-3 rounded-r-full ${
+                  `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full ${
                     isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
                   }`
                 }

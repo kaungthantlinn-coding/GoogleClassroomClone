@@ -18,7 +18,6 @@ interface ReusePostModalProps {
 
 const ReusePostModal = ({ isOpen, onClose, selectedClass, onReuse }: ReusePostModalProps) => {
   const [selectedPost, setSelectedPost] = useState<string | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState('No topic');
 
   const posts: Post[] = [
     {
@@ -131,18 +130,6 @@ const ReusePostModal = ({ isOpen, onClose, selectedClass, onReuse }: ReusePostMo
                 <Users size={16} />
                 All students
               </button>
-            </div>
-
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-[#3c4043]">Topic</h3>
-                <button 
-                  onClick={() => setSelectedTopic(selectedTopic === 'No topic' ? 'Topic 1' : 'No topic')}
-                  className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded"
-                >
-                  {selectedTopic}
-                </button>
-              </div>
             </div>
           </div>
         </div>

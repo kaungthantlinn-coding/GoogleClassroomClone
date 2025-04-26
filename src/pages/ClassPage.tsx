@@ -301,7 +301,7 @@ export default function ClassPage() {
     <ClassDataContext.Provider value={classData}>
       <div className="min-h-screen bg-[#f9f9f9]">
         {/* Navigation Tabs */}
-        <div className="bg-white border-b border-[#e0e0e0] w-full">
+        <div className="bg-white border-b border-[#e0e0e0] w-full z-30" style={{ position: 'sticky', top: 64 }}>
           <div className="flex justify-between items-center w-full px-6">
             <nav className="flex">
               <Link

@@ -13,6 +13,7 @@ import SubmissionsPage from '../pages/SubmissionsPage';
 import StudentSubmissionPage from '../pages/StudentSubmissionPage';
 import GradesPage from '../pages/GradesPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import NotFound from '../components/NotFound';
 
 export const router = createBrowserRouter([
   {
@@ -42,4 +43,8 @@ export const router = createBrowserRouter([
       { path: 'submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
     ],
   },
+  {
+    path: '*',
+    element: <NotFound />
+  }
 ]);

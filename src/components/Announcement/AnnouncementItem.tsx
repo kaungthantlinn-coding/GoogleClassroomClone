@@ -537,4 +537,4 @@ const AnnouncementItem: React.FC<AnnouncementItemProps> = ({
   );
 };
 
-export default AnnouncementItem; 
+export default AnnouncementItem;

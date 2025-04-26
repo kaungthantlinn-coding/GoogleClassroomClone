@@ -28,6 +28,8 @@ export interface Assignment {
   createdAt: string;
   updatedAt?: string;
   status?: AssignmentStatus;
+  allowLateSubmissions?: boolean;
+  lateSubmissionPolicy?: string;
   color?: string;
 }
 
