@@ -12,10 +12,21 @@ import ClassworkPage from '../pages/ClassworkPage';
 import SubmissionsPage from '../pages/SubmissionsPage';
 import StudentSubmissionPage from '../pages/StudentSubmissionPage';
 import GradesPage from '../pages/GradesPage';
+import LoginPage from '../pages/LoginPage';
+import SignupPage from '../pages/SignupPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import NotFound from '../components/NotFound';
 
 export const router = createBrowserRouter([
+  // Auth routes (outside MainLayout)
+  {
+    path: '/login',
+    element: <LoginPage />
+  },
+  {
+    path: '/signup',
+    element: <SignupPage />
+  },
   {
     path: '/',
     element: <ErrorBoundary><MainLayout /></ErrorBoundary>,
@@ -27,7 +38,7 @@ export const router = createBrowserRouter([
       { path: 'archived', element: <ArchivedPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'to-review', element: <ToReviewPage /> },
-      
+
       // Class context routes
       { path: 'class/:classId', element: <ClassPage /> },
       { path: 'class/:classId/stream', element: <ClassPage /> },
@@ -36,7 +47,7 @@ export const router = createBrowserRouter([
       { path: 'class/:classId/grades', element: <GradesPage /> },
       { path: 'class/:classId/submissions/:assignmentId', element: <SubmissionsPage /> },
       { path: 'class/:classId/submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
-      
+
       // Non-class context routes
       { path: 'classwork', element: <ClassworkPage /> },
       { path: 'submissions/:assignmentId', element: <SubmissionsPage /> },

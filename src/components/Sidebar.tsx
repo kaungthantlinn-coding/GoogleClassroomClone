@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, NavLink, Link } from 'react-router-dom';
-import { 
-  Home, 
-  BookOpen, 
-  CheckSquare, 
-  Archive, 
-  Settings, 
-  GraduationCap, 
+import {
+  Home,
+  BookOpen,
+  CheckSquare,
+  Archive,
+  Settings,
+  GraduationCap,
   ClipboardList,
   ChevronDown,
   ChevronUp,
@@ -53,20 +53,20 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   // Define loadClasses function at component level so it can be referenced throughout the component
   const loadClasses = () => {
     console.log("Loading classes for sidebar...");
-    
+
     // Get all classes from localStorage first
     const allClasses: Record<string, any> = {};
-    
+
     // First check for any manually created classes in localStorage
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('classData-')) {
         try {
           const rawData = localStorage.getItem(key) || '';
-          
+
           const classData = JSON.parse(rawData);
           const classId = key.replace('classData-', '');
-          
+
           if (classData && classData.name && classData.name.trim() !== '' && classData.name !== 'Unnamed Class') {
             console.log(`Found class: ${classData.name} (${classId})`);
             allClasses[classId] = {
@@ -81,7 +81,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         }
       }
     }
-    
+
     // Add default classes only if they don't exist in localStorage
     const defaultClasses = [
       {
@@ -103,19 +103,19 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         color: '#ff8a65'
       }
     ];
-    
+
     // Add default classes to our collection if not already present
     defaultClasses.forEach(cls => {
       if (!allClasses[cls.id]) {
         allClasses[cls.id] = cls;
       }
     });
-    
+
     // Convert the object to an array of classes
     const finalClasses = Object.values(allClasses);
-    
+
     console.log("Final classes for sidebar:", finalClasses);
-    
+
     // Update the teaching classes state
     setTeachingClasses(finalClasses);
   };
@@ -123,14 +123,14 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   useEffect(() => {
     // Load classes immediately on component mount
     loadClasses();
-    
+
     // Add event listener for storage changes
     const handleStorageEvent = (event: StorageEvent) => {
       if (event.key && event.key.startsWith('classData-')) {
         loadClasses();
       }
     };
-    
+
     // Add event listener for the new class-created event
     const handleClassCreatedEvent = (event: CustomEvent) => {
       if (event.detail?.action === 'addClass' && event.detail.class) {
@@ -141,11 +141,11 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         });
       }
     };
-    
+
     // Add new event listener for class deletion/archiving
     const handleClassRemovedEvent = (event: CustomEvent) => {
       if (event.detail?.action === 'removeClass' && event.detail.classId) {
-        setTeachingClasses(prevClasses => 
+        setTeachingClasses(prevClasses =>
           prevClasses.filter(cls => cls.id !== event.detail.classId)
         );
       } else if (event.detail?.action === 'clearAll') {
@@ -153,7 +153,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         loadClasses();
       }
     };
-    
+
     // Function to check screen size and set mobile state
     const checkScreenSize = () => {
       setIsMobile(window.innerWidth < BREAKPOINTS.md);
@@ -164,38 +164,45 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         setIsSidebarVisible(true);
       }
     };
-    
+
+    // Handle toggle sidebar event from Navbar
+    const handleToggleSidebar = () => {
+      setIsSidebarVisible(prevState => !prevState);
+    };
+
     // Check screen size on mount
     checkScreenSize();
-    
+
     // Add event listeners
     window.addEventListener('storage', handleStorageEvent as EventListener);
     window.addEventListener('class-created', handleClassCreatedEvent as EventListener);
     window.addEventListener('class-removed', handleClassRemovedEvent as EventListener);
     window.addEventListener('resize', checkScreenSize);
-    
+    window.addEventListener('toggle-sidebar', handleToggleSidebar);
+
     // Handle clicks outside sidebar to close it on mobile
     const handleClickOutside = (event: MouseEvent) => {
       if (isMobile && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
         setIsSidebarVisible(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
-    
+
     // Return cleanup function
     return () => {
       window.removeEventListener('storage', handleStorageEvent as EventListener);
       window.removeEventListener('class-created', handleClassCreatedEvent as EventListener);
       window.removeEventListener('class-removed', handleClassRemovedEvent as EventListener);
       window.removeEventListener('resize', checkScreenSize);
+      window.removeEventListener('toggle-sidebar', handleToggleSidebar);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isMobile]);
 
   const [isTeachingOpen, setIsTeachingOpen] = useState(true);
   const [isEnrolledOpen, setIsEnrolledOpen] = useState(true);
-  
+
   const navItems = [
     { icon: Home, label: 'Home', to: '/' },
     { icon: Calendar, label: 'Calendar', to: '/calendar' },
@@ -232,7 +239,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         console.error('Error parsing class data', e);
       }
     }
-    
+
     // Then try from banner images
     const savedBannerImages = localStorage.getItem('bannerImages');
     if (savedBannerImages) {
@@ -249,7 +256,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         console.error('Error parsing banner images', e);
       }
     }
-    
+
     // Default to a class-specific image if all else fails
     let query = 'education,classroom';
     if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
@@ -261,21 +268,21 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     } else if (className.toLowerCase().includes('cloud')) {
       query = 'technology,cloud,computing';
     }
-    
+
     // Get responsive image size based on screen width
     const imageSize = getResponsiveImageSize();
     return `https://source.unsplash.com/random/${imageSize}/?${query}`;
   };
-  
+
   // Helper function to determine responsive image size based on screen width
   const getResponsiveImageSize = (): string => {
     // Default size for larger screens
     let size = '1600x900';
-    
+
     // Check if window is available (client-side)
     if (typeof window !== 'undefined') {
       const width = window.innerWidth;
-      
+
       if (width < BREAKPOINTS.sm) {
         // Small mobile devices
         size = '640x360';
@@ -290,43 +297,43 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         size = '1280x720';
       }
     }
-    
+
     return size;
   };
-  
+
   // Helper function to update existing Unsplash URLs to be responsive
   const getResponsiveImageUrl = (url: string): string => {
     // If it's not an Unsplash URL, return as is
     if (!url.includes('unsplash.com')) return url;
-    
+
     try {
       // Get the appropriate size for the current device
       const imageSize = getResponsiveImageSize();
-      
+
       // If it's an Unsplash random URL, update the size
       if (url.includes('unsplash.com/random')) {
         // Extract the query parameters
         const queryMatch = url.match(/\?(.+)$/);
         const query = queryMatch ? queryMatch[1] : '';
-        
+
         // Create a new URL with the updated size
         return `https://source.unsplash.com/random/${imageSize}/${query ? '?' + query : ''}`;
       }
-      
+
       // For specific Unsplash images (not random), we can use the Unsplash API format
       // Example: https://images.unsplash.com/photo-123456?w=1600&h=900
       if (url.includes('images.unsplash.com')) {
         // Remove any existing size parameters
         const baseUrl = url.split('?')[0];
         const [width, height] = imageSize.split('x');
-        
+
         // Add new responsive size parameters
         return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
       }
     } catch (e) {
       console.error('Error creating responsive image URL', e);
     }
-    
+
     // Return original URL if any issues occur
     return url;
   };
@@ -337,7 +344,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
     const id = `class-${Date.now()}`;
     const coverImage = getCoverImageForClass(id, newClass.name);
-    
+
     const classToSave = {
       id,
       name: newClass.name,
@@ -352,7 +359,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     try {
       // Save to localStorage with reliable key format
       localStorage.setItem(`classData-${id}`, JSON.stringify(classToSave));
-      
+
       // Create a new class object for state update
       const newClassObj = {
         id: classToSave.id,
@@ -360,7 +367,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         section: classToSave.section,
         color: classToSave.color
       };
-      
+
       // Update state immediately with functional update
       setTeachingClasses(prevClasses => {
         const updatedClasses = [...prevClasses, newClassObj];
@@ -382,7 +389,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       // Close modal and reset form
       setShowCreateModal(false);
       setNewClass({ name: '', section: '', color: '#4285f4' });
-      
+
       // Navigate to the new class page
       navigate(`/class/${id}`);
     } catch (error) {
@@ -393,6 +400,11 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   // Toggle sidebar visibility on mobile
   const toggleMobileSidebar = () => {
     setIsSidebarVisible(!isSidebarVisible);
+  };
+
+  // Function to handle toggle sidebar event from Navbar
+  const handleToggleSidebar = () => {
+    setIsSidebarVisible(prevState => !prevState);
   };
 
   // Function to open create class modal
@@ -406,23 +418,19 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile menu toggle button */}
-      {isMobile && (
-        <div className="fixed left-4 top-16 z-40">
-          <button 
-            onClick={toggleMobileSidebar}
-            className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100"
-            aria-label="Toggle sidebar"
-          >
-            <Menu size={24} className="text-[#3c4043]" />
-          </button>
-        </div>
+      {/* Backdrop overlay for mobile */}
+      {isMobile && isSidebarVisible && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 transition-opacity duration-300"
+          onClick={toggleMobileSidebar}
+          aria-hidden="true"
+        />
       )}
-      
+
       {/* Mobile create class button */}
       {isMobile && (
         <div className="fixed right-4 bottom-4 z-40">
-          <button 
+          <button
             onClick={openCreateClassModal}
             className="p-3 bg-[#1a73e8] rounded-full shadow-lg text-white hover:bg-[#1557b0] transition-colors"
             aria-label="Create class"
@@ -432,33 +440,47 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         </div>
       )}
 
+      {/* Mobile menu toggle button */}
+      {isMobile && !isSidebarVisible && (
+        <div className="fixed left-4 top-4 z-40">
+          <button
+            onClick={toggleMobileSidebar}
+            className="p-2 bg-white rounded-full shadow-md text-[#3c4043] hover:bg-gray-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu size={24} />
+          </button>
+        </div>
+      )}
+
       <aside
         ref={sidebarRef}
-        className={`fixed left-0 top-0 h-full bg-white shadow-lg z-30 flex flex-col transition-all duration-300 ${
+        className={`fixed left-0 top-0 h-full bg-white shadow-lg z-30 flex flex-col transition-all duration-300 ease-in-out ${
           isCollapsed && !isMobile ? 'w-[72px]' : 'w-[260px]'
         } ${isMobile ? (isSidebarVisible ? 'translate-x-0' : '-translate-x-full') : ''}`}
-        style={{ overflowY: 'auto' }}
+        style={{
+          overflowY: 'auto',
+          paddingTop: isMobile ? '80px' : '64px',
+          boxShadow: isMobile ? '0 0 15px rgba(0,0,0,0.1)' : undefined
+        }}
       >
+        {/* Mobile close button */}
+        {isMobile && isSidebarVisible && (
+          <div className="absolute top-0 left-0 right-0 h-16 bg-white flex items-center justify-between px-4 border-b">
+            <div className="flex items-center">
+              <GraduationCap size={24} className="text-[#1a73e8] mr-2" />
+              <span className="font-medium text-[#3c4043]">Classroom</span>
+            </div>
+            <button
+              onClick={toggleMobileSidebar}
+              className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+              aria-label="Close sidebar"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+        )}
         <nav className="py-3 px-2 relative">
-          {/* Non-mobile create class button */}
-          {!isMobile && !isCollapsed && (
-            <button
-              onClick={openCreateClassModal}
-              className="w-full flex items-center justify-center gap-2 my-2 py-2 px-4 bg-[#1a73e8] text-white rounded-md hover:bg-[#1557b0] transition-colors"
-            >
-              <Plus size={18} />
-              <span className="text-sm font-medium">Create class</span>
-            </button>
-          )}
-          {!isMobile && isCollapsed && (
-            <button
-              onClick={openCreateClassModal}
-              className="w-full flex items-center justify-center my-2 py-2 rounded-md hover:bg-[#f8f9fa] transition-colors"
-              title="Create class"
-            >
-              <Plus size={24} className="text-[#3c4043]" />
-            </button>
-          )}
           {navItems.map((item) => (
             <div key={item.to} className="relative">
               <NavLink
@@ -508,7 +530,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     {!isCollapsed && <span className="text-sm">{item.label}</span>}
                   </NavLink>
                 ))}
-                
+
                 {/* Teaching Classes */}
                 {!isCollapsed && teachingClasses.map((classItem) => (
                   <div key={classItem.id} className="group relative flex items-center">
@@ -522,7 +544,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                       }}
                       className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
                     >
-                      <div 
+                      <div
                         className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
                         style={{ backgroundColor: classItem.color || '#4285f4' }}
                       >
@@ -537,10 +559,10 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                       onClick={() => {
                         // Remove the class from localStorage
                         localStorage.removeItem(`classData-${classItem.id}`);
-                        
+
                         // We intentionally don't remove banner images to prevent side effects
                         // This ensures that if you recreate a class with the same ID, the banner image is preserved
-                        
+
                         // Dispatch custom event for class removal
                         const classRemovedEvent = new CustomEvent('class-removed', {
                           detail: {
@@ -549,7 +571,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                           }
                         });
                         window.dispatchEvent(classRemovedEvent);
-                        
+
                         // Also update local state
                         setTeachingClasses(prevClasses => prevClasses.filter(cls => cls.id !== classItem.id));
                       }}
@@ -622,13 +644,13 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       {/* Create Class Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <div 
+          <div
             className="bg-white w-full max-w-[500px] mx-4 rounded-lg shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-[22px] font-normal text-[#3c4043]">Create class</h2>
-              <button 
+              <button
                 onClick={() => setShowCreateModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-full"
               >

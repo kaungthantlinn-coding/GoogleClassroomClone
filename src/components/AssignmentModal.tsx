@@ -21,10 +21,6 @@ export interface AssignmentData {
   attachments: Attachment[];
   assignTo: string[];
   scheduledFor: string | null;
-  gradeCategory?: string;
-  rubric?: {
-    criteria: { description: string; points: number }[];
-  };
   allowLateSubmissions?: boolean;
   lateSubmissionPolicy?: string;
 }
@@ -51,12 +47,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
   const [dueTime, setDueTime] = useState('');
   const [topic, setTopic] = useState('No topic');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isCreatingRubric, setIsCreatingRubric] = useState(false);
   const [assignTo, setAssignTo] = useState<string[]>(['All students']);
   const [scheduledFor, setScheduledFor] = useState<string | null>(null);
-  const [gradeCategory, setGradeCategory] = useState('');
-  const [showGradeCategories, setShowGradeCategories] = useState(false);
-  const [gradeCategories] = useState(['Homework', 'Classwork', 'Test', 'Quiz', 'Project']);
   const [showSchedulingOptions, setShowSchedulingOptions] = useState(true); // Show by default for better discoverability
   const [allowLateSubmissions, setAllowLateSubmissions] = useState(() => {
     const savedSetting = localStorage.getItem('allowLateSubmissions');
@@ -80,9 +72,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     }
     return ['Unit 1', 'Unit 2', 'Projects', 'Homework'];
   });
-  const [rubric, setRubric] = useState<{ criteria: { description: string; points: number }[] }>({
-    criteria: []
-  });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -99,7 +88,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       setAttachments(assignmentToEdit.attachments);
       setAssignTo(assignmentToEdit.assignTo);
       setScheduledFor(assignmentToEdit.scheduledFor);
-      setGradeCategory(assignmentToEdit.gradeCategory || '');
       
       // Load late submission settings if they exist
       if (assignmentToEdit.allowLateSubmissions !== undefined) {
@@ -112,14 +100,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       // Show advanced options if scheduled date or late submissions are configured
       if (assignmentToEdit.scheduledFor || assignmentToEdit.allowLateSubmissions !== undefined) {
         setShowSchedulingOptions(true);
-      }
-      
-      if (assignmentToEdit.rubric) {
-        setIsCreatingRubric(true);
-        setRubric(assignmentToEdit.rubric);
-      } else {
-        setIsCreatingRubric(false);
-        setRubric({ criteria: [] });
       }
     } else if (isOpen && !assignmentToEdit) {
       // Load saved values from localStorage when opening a new assignment form
@@ -202,27 +182,27 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       attachments,
       assignTo,
       scheduledFor,
-      gradeCategory,
-      rubric: isCreatingRubric ? rubric : undefined,
       allowLateSubmissions,
       lateSubmissionPolicy
     };
 
     if (assignmentToEdit) {
-      // Save updated assignment data to localStorage
-      const assignmentKey = `assignment-${assignmentToEdit.id}`;
-      const updatedData = {
+      // Create updated assignment object with the existing ID
+      const updatedData: Assignment = {
         ...assignmentData,
         id: assignmentToEdit.id,
         updatedAt: new Date().toISOString(),
         className: className,
-        section: document.title.includes('-') ? document.title.split('-')[1].trim() : ''
+        section: document.title.includes('-') ? document.title.split('-')[1].trim() : '',
+        classId: classId || '',
+        createdAt: (assignmentToEdit as any).createdAt || new Date().toISOString()
       };
       
-      localStorage.setItem(assignmentKey, JSON.stringify(updatedData));
+      // Save the updated assignment using our utility function
+      saveAssignment(updatedData);
       
       // Dispatch a custom event to notify other components about the updated assignment
-      const updatedAssignmentEvent = new CustomEvent('newAssignmentCreated', {
+      const updatedAssignmentEvent = new CustomEvent('assignmentUpdated', {
         detail: { assignmentId: assignmentToEdit.id, assignmentData: updatedData }
       });
       window.dispatchEvent(updatedAssignmentEvent);
@@ -267,15 +247,11 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     setTopic(savedTopic || 'No topic');
     
     setAttachments([]);
-    setIsCreatingRubric(false);
     setAssignTo(['All students']);
     
     // Preserve scheduled post date if it was previously set in localStorage
     const savedScheduledDate = localStorage.getItem('scheduledPostDate');
     setScheduledFor(savedScheduledDate || null);
-    
-    setGradeCategory('');
-    setRubric({ criteria: [] });
     
     // Preserve late submission settings if they were previously set in localStorage
     const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
@@ -348,27 +324,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     setAttachments(newAttachments);
   };
 
-  const addRubricCriteria = () => {
-    setRubric({
-      criteria: [
-        ...rubric.criteria,
-        { description: 'New criteria', points: 10 }
-      ]
-    });
-  };
-
-  const updateRubricCriteria = (index: number, description: string, points: number) => {
-    const newCriteria = [...rubric.criteria];
-    newCriteria[index] = { description, points };
-    setRubric({ criteria: newCriteria });
-  };
-
-  const removeRubricCriteria = (index: number) => {
-    const newCriteria = [...rubric.criteria];
-    newCriteria.splice(index, 1);
-    setRubric({ criteria: newCriteria });
-  };
-  
   if (!isOpen) return null;
 
   return (
@@ -515,67 +470,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                   </button>
                 </div>
               </div>
-
-              {/* Rubric Section */}
-              {isCreatingRubric && (
-                <div className="bg-white border border-[#e0e0e0] rounded-lg p-4 mt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium text-[#3c4043]">Rubric</h3>
-                    <button 
-                      onClick={() => setIsCreatingRubric(false)}
-                      className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  
-                  {rubric.criteria.length > 0 ? (
-                    <div className="space-y-4 mb-4">
-                      {rubric.criteria.map((criterion, index) => (
-                        <div key={index} className="flex items-start gap-4 p-3 bg-[#f8f9fa] rounded">
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={criterion.description}
-                              onChange={(e) => updateRubricCriteria(index, e.target.value, criterion.points)}
-                              className="w-full p-2 bg-white border border-[#dadce0] rounded focus:outline-none text-sm"
-                              placeholder="Criterion description"
-                            />
-                          </div>
-                          <div className="w-24">
-                            <input
-                              type="number"
-                              value={criterion.points}
-                              onChange={(e) => updateRubricCriteria(index, criterion.description, Number(e.target.value))}
-                              className="w-full p-2 bg-white border border-[#dadce0] rounded focus:outline-none text-sm"
-                              placeholder="Points"
-                              min="0"
-                            />
-                          </div>
-                          <button 
-                            onClick={() => removeRubricCriteria(index)}
-                            className="p-2 hover:bg-[#e8eaed] rounded-full"
-                          >
-                            <X size={16} className="text-[#5f6368]" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-[#5f6368] text-sm">
-                      No criteria added yet
-                    </div>
-                  )}
-                  
-                  <button 
-                    onClick={addRubricCriteria}
-                    className="w-full p-3 border border-dashed border-[#dadce0] rounded text-[#1a73e8] text-sm hover:bg-[#f6fafe] flex items-center justify-center gap-2"
-                  >
-                    <Plus size={16} />
-                    Add criterion
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -773,68 +667,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
               </div>
             </div>
 
-            {/* Grade Category */}
-            <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-[#3c4043]">Grade Category</h3>
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowGradeCategories(!showGradeCategories)}
-                    className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-2 py-1 rounded flex items-center gap-1"
-                  >
-                    {gradeCategory || 'No category'}
-                    <ChevronDown size={16} />
-                  </button>
-                  {showGradeCategories && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                      <button
-                        onClick={() => {
-                          setGradeCategory('');
-                          setShowGradeCategories(false);
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                      >
-                        {!gradeCategory && <Check size={16} className="text-[#1a73e8]" />}
-                        <span className={!gradeCategory ? 'text-[#1a73e8]' : ''}>
-                          No category
-                        </span>
-                      </button>
-                      <div className="border-t border-gray-200 my-1"></div>
-                      {gradeCategories.map((category) => (
-                        <button
-                          key={category}
-                          onClick={() => {
-                            setGradeCategory(category);
-                            setShowGradeCategories(false);
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                        >
-                          {gradeCategory === category && <Check size={16} className="text-[#1a73e8]" />}
-                          <span className={gradeCategory === category ? 'text-[#1a73e8]' : ''}>
-                            {category}
-                          </span>
-                        </button>
-                      ))}
-                      <div className="border-t border-gray-200 my-1"></div>
-                      <button
-                        onClick={() => {
-                          const newCategory = prompt('Enter new category name:');
-                          if (newCategory) {
-                            setGradeCategory(newCategory);
-                          }
-                          setShowGradeCategories(false);
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-[#1a73e8] flex items-center gap-2"
-                      >
-                        <Plus size={16} />
-                        Create new category
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
             {/* Scheduling Options */}
             <div className="bg-white border border-[#e0e0e0] rounded-lg p-4">
               <div className="flex items-center justify-between mb-4">
@@ -928,16 +760,6 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-
-            <div>
-              <button 
-                onClick={() => setIsCreatingRubric(!isCreatingRubric)}
-                className="text-[#1a73e8] text-sm hover:bg-[#f6fafe] px-4 py-2 rounded flex items-center gap-1"
-              >
-                <Plus size={16} />
-                {isCreatingRubric ? 'Edit Rubric' : 'Rubric'}
-              </button>
             </div>
           </div>
         </div>

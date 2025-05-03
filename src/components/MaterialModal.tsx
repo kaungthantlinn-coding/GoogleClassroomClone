@@ -160,6 +160,21 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 
     // If we're editing an existing material, include the ID
     if (materialToEdit) {
+      // Create updated material object with the existing ID
+      const updatedMaterial: Material = {
+        ...materialData,
+        id: materialToEdit.id,
+        classId: classId || '',
+        className: className,
+        section: (materialToEdit as any).section || '',
+        createdAt: (materialToEdit as any).createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Save the updated material
+      saveMaterial(updatedMaterial);
+      
+      // Notify parent component
       onSubmit(materialData, materialToEdit.id);
     } else {
       // Create a new material
