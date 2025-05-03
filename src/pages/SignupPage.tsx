@@ -1,19 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { User } from '../types/course';
+import { Eye, EyeOff } from 'lucide-react';
 
 const SignupPage: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [role, setRole] = useState<'teacher' | 'student'>('teacher');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
-  const setUser = useAuthStore((state) => state.setUser);
+  const { register, isLoading, error: authError } = useAuthStore(state => ({
+    register: state.register,
+    isLoading: state.isLoading,
+    error: state.error
+  }));
+
+  // Update local error state when auth store error changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,40 +49,16 @@ const SignupPage: React.FC = () => {
     }
 
     try {
-      setIsLoading(true);
-
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // For demo purposes, we'll just check if the email has a valid format
-      if (!email.includes('@')) {
-        setError('Please enter a valid email address');
-        setIsLoading(false);
-        return;
+      // Use the auth store register method
+      await register(name, email, password, role);
+      
+      // If no error, redirect to home page
+      if (!authError) {
+        navigate('/');
       }
-
-      // Mock successful registration
-      const mockUser: User = {
-        id: Date.now().toString(),
-        name: name,
-        email: email,
-        role: role,
-        avatar: `https://ui-avatars.com/api/?name=${name.replace(' ', '+')}&background=${role === 'teacher' ? '1a73e8' : '4caf50'}&color=fff`
-      };
-
-      // Store user in localStorage for persistence
-      localStorage.setItem('user', JSON.stringify(mockUser));
-
-      // Update auth store
-      setUser(mockUser);
-
-      // Redirect to home page
-      navigate('/');
-    } catch (err) {
-      console.error('Signup error:', err);
-      setError('An error occurred during signup. Please try again.');
-    } finally {
-      setIsLoading(false);
+    } catch (err: any) {
+      // Handle any unexpected errors
+      setError(err.message || 'An error occurred during signup. Please try again.');
     }
   };
 
@@ -141,31 +130,59 @@ const SignupPage: React.FC = () => {
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8] focus:z-10 sm:text-sm transition-colors duration-200"
-                placeholder="Create a password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8] focus:z-10 sm:text-sm transition-colors duration-200"
+                  placeholder="Create a password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} className="text-gray-500" />
+                  ) : (
+                    <Eye size={20} className="text-gray-500" />
+                  )}
+                </button>
+              </div>
             </div>
             <div>
               <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-              <input
-                id="confirm-password"
-                name="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8] focus:z-10 sm:text-sm transition-colors duration-200"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  id="confirm-password"
+                  name="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8] focus:z-10 sm:text-sm transition-colors duration-200"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={20} className="text-gray-500" />
+                  ) : (
+                    <Eye size={20} className="text-gray-500" />
+                  )}
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">I am a</label>
@@ -220,8 +237,21 @@ const SignupPage: React.FC = () => {
                   </svg>
                   Creating account...
                 </>
-              ) : `Create ${role} account`}
+              ) : 'Create Account'}
             </button>
+          </div>
+
+          <div className="mt-6">
+            <p className="text-xs text-center text-gray-500">
+              By creating an account, you agree to our{' '}
+              <a href="#" className="font-medium text-[#1a73e8] hover:text-[#1557b0] transition-colors duration-200">
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a href="#" className="font-medium text-[#1a73e8] hover:text-[#1557b0] transition-colors duration-200">
+                Privacy Policy
+              </a>
+            </p>
           </div>
         </form>
       </div>
