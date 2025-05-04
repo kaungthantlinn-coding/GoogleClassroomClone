@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useQuery } from '@tanstack/react-query';
 import { Course } from '../types/course';
+import { getCourses } from '../api/courseApi';
 
 // Custom type for the dropdown courses
 interface DropdownCourse extends Partial<Course> {
@@ -57,75 +58,20 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   const { data: courses } = useQuery<DropdownCourse[]>({
     queryKey: ['courses'],
     queryFn: async () => {
-      // Get default courses matching the screenshot
-      const defaultCourses = [
-        {
-          id: 'ui-ux-1',
-          name: 'UI/UX',
-          section: 'Batch 1',
-          teacherName: 'John Doe',
-          color: '#4285f4', // Blue
-          textColor: 'white',
-          isDefault: true,
-          avatar: 'U'
-        },
-        {
-          id: 'fullstack-2',
-          name: 'FullStack',
-          section: 'Batch 2',
-          teacherName: 'Jane Smith',
-          color: '#4285f4', // Blue
-          textColor: 'white',
-          isDefault: true,
-          avatar: 'F'
-        },
-        {
-          id: 'riso-2',
-          name: 'RISO',
-          section: 'Batch-2',
-          teacherName: 'San Mie Htay',
-          color: '#5a67f2', // Purple
-          textColor: 'white',
-          isDefault: true,
-          avatar: 'S'
-        }
-      ];
-      
-      // Look for classes in localStorage
-      const localClasses: DropdownCourse[] = [];
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('classData-') && 
-            !key.includes('ui-ux-1') && 
-            !key.includes('fullstack-2') && 
-            !key.includes('riso-2')) {
-          try {
-            const rawData = localStorage.getItem(key) || '';
-            const classData = JSON.parse(rawData);
-            if (classData) {
-              const courseId = key.replace('classData-', '');
-              const courseName = classData.name || classData.className || '';
-              
-              localClasses.push({
-                id: courseId,
-                name: courseName !== '' ? courseName : 'Class ' + courseId.slice(0, 4),
-                section: classData.section || '',
-                teacherName: classData.teacherName || 'You',
-                color: classData.color || '#ff8a65',
-                textColor: classData.textColor || 'white',
-                isDefault: false,
-                avatar: courseName ? courseName[0].toUpperCase() : 'C'
-              });
-            }
-          } catch (e) {
-            console.error('Error parsing class data from localStorage', e);
-          }
-        }
+      try {
+        // Fetch courses from the API
+        const coursesData = await getCourses();
+        
+        // Convert Course[] to DropdownCourse[]
+        return coursesData.map(course => ({
+          ...course,
+          avatar: course.name ? course.name[0].toUpperCase() : 'C',
+          isDefault: false
+        }));
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
       }
-      
-      // Return combined list
-      return [...defaultCourses, ...localClasses];
     },
   });
 

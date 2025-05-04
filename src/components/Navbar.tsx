@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Menu, Plus, Grid, Calendar, ChevronRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useQueryClient } from '@tanstack/react-query';
 import ClassActionDialog from './ClassActionDialog';
 
 export default function Navbar() {
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [dialogType, setDialogType] = useState<'join' | 'create'>('join');
   const [showAddDropdown, setShowAddDropdown] = useState(false);

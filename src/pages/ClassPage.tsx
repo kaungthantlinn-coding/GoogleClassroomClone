@@ -1,5 +1,5 @@
 import React, { useState, createContext, useEffect, useContext } from 'react';
-import { useLocation, useParams, Link } from 'react-router-dom';
+import { useLocation, useParams, Link, Navigate } from 'react-router-dom';
 import { Settings2, Copy, Calendar, MoreVertical, Expand, BellDot, Settings, Pencil, Clock } from 'lucide-react';
 import ClassworkPage from './ClassworkPage';
 import SubmissionsPage from './SubmissionsPage';
@@ -8,6 +8,11 @@ import AnnouncementInput from '../components/AnnouncementInput';
 import AnnouncementList from '../components/Announcement/AnnouncementList';
 import UpcomingAssignmentsModal from '../components/UpcomingAssignmentsModal';
 import { Announcement } from '../types/announcement';
+import { getCourseById, updateCourse } from '../api/courseApi';
+import { getAnnouncements } from '../api/announcementApi';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Course } from '../types/course';
+import classroomImage from '../assets/classroom.png';
 
 import { Assignment, getUpcomingAssignments } from '../types/assignment';
 
@@ -24,7 +29,7 @@ const BREAKPOINTS = {
 // Helper function to format due date
 const formatDueDate = (dateString: string): string => {
   if (!dateString) return 'No due date';
-  
+
   try {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -48,21 +53,17 @@ const getStatusColor = (status?: string): string => {
 };
 
 // Define the class data interface
-export interface ClassData {
-  className?: string;
-  section?: string;
-  classCode?: string;
-  subject?: string;
-  room?: string;
+export interface ClassData extends Course {
   isNewClass?: boolean;
-  color?: string;
-  coverImage?: string;
 }
 
 // Create a context for class data
 export const ClassDataContext = createContext<ClassData>({
-  className: 'Class',
-  section: 'Section'
+  id: '',
+  name: 'Class',
+  section: 'Section',
+  teacherName: '',
+  enrollmentCode: ''
 });
 
 // Import the real PeoplePage component
@@ -72,13 +73,13 @@ import PeoplePage from './PeoplePage';
 
 const GradesPage: React.FC = () => {
   const classData = useContext(ClassDataContext);
-  
+
   useEffect(() => {
-    const className = classData.className || 'Class';
+    const className = classData.name || 'Class';
     const section = classData.section ? ` - ${classData.section}` : '';
     document.title = `${className}${section} - Grades - Google Classroom`;
   }, [classData]);
-  
+
   return (
     <div className="py-6">
       <h2 className="text-2xl font-normal text-[#3c4043] mb-6">Grades</h2>
@@ -89,59 +90,176 @@ const GradesPage: React.FC = () => {
   );
 };
 
+// Use external CDN for reliable fallback images
+const FALLBACK_IMAGES = {
+  education: 'https://images.pexels.com/photos/256520/pexels-photo-256520.jpeg',
+  classroom: 'https://images.pexels.com/photos/733857/pexels-photo-733857.jpeg',
+  default: 'https://images.pexels.com/photos/1326947/pexels-photo-1326947.jpeg'
+};
+
+// Function to validate image URLs
+const isValidImageUrl = (url: string | undefined | null): boolean => {
+  if (!url) return false;
+  if (url === 'string') return false;
+  if (url.includes('http://localhost:3003/string')) return false;
+  if (url.includes('http://localhost:3003/src/assets/')) return false; // Direct URL references to local assets won't work
+  return true;
+};
+
 export default function ClassPage() {
-  const { classId } = useParams();
+  const { classId } = useParams<{ classId: string }>();
   const location = useLocation();
-  
-  // Try to get class data from localStorage first, if not available use location.state
-  const getInitialClassData = () => {
-    const savedData = localStorage.getItem(`classData-${classId}`);
-    let classData: ClassData = {};
-    
-    if (savedData) {
-      try {
-        classData = JSON.parse(savedData);
-      } catch (e) {
-        console.error('Error parsing class data', e);
+  const queryClient = useQueryClient();
+
+  // Redirect if classId is not provided
+  if (!classId) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Helper function to determine responsive image size
+  const getResponsiveImageSize = (): string => {
+    // Default size for larger screens
+    let size = '1600x900';
+
+    // Check if window is available (client-side)
+    if (typeof window !== 'undefined') {
+      const width = window.innerWidth;
+
+      if (width < BREAKPOINTS.sm) {
+        // Small mobile devices
+        size = '640x360';
+      } else if (width < BREAKPOINTS.md) {
+        // Larger mobile devices
+        size = '768x432';
+      } else if (width < BREAKPOINTS.lg) {
+        // Tablets
+        size = '1024x576';
+      } else if (width < BREAKPOINTS.xl) {
+        // Small desktops
+        size = '1280x720';
       }
     }
-    
-    // Use location state as a fallback, or for updates
+
+    return size;
+  };
+
+  // Helper function to update existing Unsplash URLs to be responsive
+  const getResponsiveImageUrl = (url: string): string => {
+    // If it's not an Unsplash URL, return as is
+    if (!url.includes('unsplash.com')) return url;
+
+    try {
+      // Get the appropriate size for the current device
+      const imageSize = getResponsiveImageSize();
+
+      // If it's an Unsplash random URL, update the size
+      if (url.includes('unsplash.com/random')) {
+        // Extract the query parameters
+        const queryMatch = url.match(/\?(.+)$/);
+        const query = queryMatch ? queryMatch[1] : '';
+
+        // Create a new URL with the updated size
+        return `https://source.unsplash.com/random/${imageSize}/${query ? '?' + query : ''}`;
+      }
+
+      // For specific Unsplash images (not random), we can use the Unsplash API format
+      if (url.includes('images.unsplash.com')) {
+        // Remove any existing size parameters
+        const baseUrl = url.split('?')[0];
+        const [width, height] = imageSize.split('x');
+
+        // Add new responsive size parameters
+        return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
+      }
+    } catch (e) {
+      console.error('Error creating responsive image URL', e);
+    }
+
+    // Return original URL if any issues occur
+    return url;
+  };
+
+  const { data: courseData, isLoading, error } = useQuery<Course>({
+    queryKey: ['course', classId],
+    queryFn: async () => {
+      try {
+        if (!classId) {
+          console.error('Invalid course ID provided: undefined');
+          throw new Error('Invalid course ID: undefined');
+        }
+        const course = await getCourseById(classId);
+        
+        // Ensure we have a consistent ID format
+        if (course.courseId && !course.id) {
+          course.id = course.courseId.toString();
+        }
+        
+        // Ensure we have the GUID available
+        if (course.courseGuid) {
+          // We'll use this GUID for future API calls
+          console.log('Course GUID:', course.courseGuid);
+        }
+        
+        return course;
+      } catch (error) {
+        console.error('Error fetching course:', error);
+        throw error;
+      }
+    },
+    enabled: !!classId && classId !== 'undefined',
+    retry: 1 // Limit retries to avoid too many failed API calls
+  });
+
+  // Merge course data with location state if provided
+  const getClassData = (): ClassData => {
     const locationState = location.state || {};
-    
-    // Merge the data, prioritizing location state for updates
+
+    if (courseData) {
+      return {
+        ...courseData,
+        ...locationState,
+        name: locationState.className || courseData.name || 'Class',
+        section: locationState.section || courseData.section || 'Section',
+        color: locationState.color || courseData.color || '#1a73e8',
+        coverImage: locationState.coverImage || courseData.coverImage || classroomImage
+      };
+    }
+
+    // Fallback if data is not loaded yet
     return {
-      ...classData,
-      ...locationState,
-      className: locationState.className || classData.className || 'Class',
-      section: locationState.section || classData.section || 'Section',
-      color: locationState.color || classData.color || '#1a73e8',
-      coverImage: locationState.coverImage || classData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
+      id: classId || '',
+      name: locationState.className || 'Class',
+      section: locationState.section || 'Section',
+      teacherName: '',
+      enrollmentCode: locationState.classCode || '',
+      color: locationState.color || '#1a73e8',
+      coverImage: locationState.coverImage || classroomImage,
+      isNewClass: false
     };
   };
-  
-  const [classData, setClassData] = useState(getInitialClassData());
+
+  const [classData, setClassData] = useState<ClassData>(getClassData());
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  
+
   // Upcoming assignments data
   const [upcomingAssignments, setUpcomingAssignments] = useState<Assignment[]>([]);
   const [allUpcomingAssignments, setAllUpcomingAssignments] = useState<Assignment[]>([]);
   const [showAllAssignments, setShowAllAssignments] = useState(false);
-  
+
   // Load upcoming assignments when the component mounts or when classId changes
   useEffect(() => {
     if (classId) {
       loadUpcomingAssignments();
-      
+
       // Listen for assignment updates
       const handleAssignmentUpdate = () => {
         loadUpcomingAssignments();
       };
-      
+
       window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
       window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
       window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
-      
+
       return () => {
         window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
         window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
@@ -149,102 +267,110 @@ export default function ClassPage() {
       };
     }
   }, [classId]);
-  
+
   // Function to load upcoming assignments
   const loadUpcomingAssignments = () => {
-    if (classId) {
-      const assignments = getUpcomingAssignments(classId);
-      
-      // Store all assignments
-      setAllUpcomingAssignments(assignments);
-      
-      // Sort assignments by priority: due-soon > missing > upcoming > completed
-      const sortedAssignments = [...assignments].sort((a, b) => {
-        const priorityOrder: Record<string, number> = {
-          'due-soon': 0,
-          'missing': 1,
-          'upcoming': 2,
-          'completed': 3
-        };
-        
-        const priorityA = priorityOrder[a.status || 'upcoming'];
-        const priorityB = priorityOrder[b.status || 'upcoming'];
-        
-        return priorityA - priorityB;
-      });
-      
-      // Limit to 1 assignment for display (most urgent one)
-      setUpcomingAssignments(sortedAssignments.slice(0, 1));
+    if (classId && classId !== 'undefined') {
+      try {
+        const assignments = getUpcomingAssignments(classId);
+
+        // Store all assignments
+        setAllUpcomingAssignments(assignments);
+
+        // Sort assignments by priority: due-soon > missing > upcoming > completed
+        const sortedAssignments = [...assignments].sort((a, b) => {
+          const priorityOrder: Record<string, number> = {
+            'due-soon': 0,
+            'missing': 1,
+            'upcoming': 2,
+            'completed': 3
+          };
+
+          const priorityA = priorityOrder[a.status || 'upcoming'];
+          const priorityB = priorityOrder[b.status || 'upcoming'];
+
+          return priorityA - priorityB;
+        });
+
+        // Limit to 1 assignment for display (most urgent one)
+        setUpcomingAssignments(sortedAssignments.slice(0, 1));
+      } catch (error) {
+        console.error('Error loading upcoming assignments:', error);
+        setAllUpcomingAssignments([]);
+        setUpcomingAssignments([]);
+      }
+    } else {
+      // Reset assignments if no valid classId
+      setAllUpcomingAssignments([]);
+      setUpcomingAssignments([]);
     }
   };
-  
+
   // Function to handle View All click
   const handleViewAllClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setShowAllAssignments(true);
   };
-  
+
   // Close the modal when done viewing all assignments
   const handleCloseModal = () => {
     setShowAllAssignments(false);
   };
-  
+
   // Load announcements when the component mounts or when classId changes
   useEffect(() => {
-    loadAnnouncements();
+    if (classId && classId !== 'undefined') {
+      loadAnnouncements();
+    }
   }, [classId]);
-  
-  // Function to load announcements from localStorage
-  const loadAnnouncements = () => {
+
+  // Function to load announcements from API
+  const loadAnnouncements = async () => {
     try {
-      const stored = localStorage.getItem('classroom_announcements');
-      if (stored) {
-        const allAnnouncements = JSON.parse(stored);
-        // Filter announcements by classId
-        const classAnnouncements = allAnnouncements.filter(
-          (announcement: Announcement) => announcement.classId === classId
-        );
+      if (!classId || classId === 'undefined') {
+        setAnnouncements([]);
+        return;
+      }
+
+      // Use API call instead of localStorage
+      const response = await getAnnouncements(classId);
+      if (response && Array.isArray(response)) {
         // Sort by creation date (newest first)
-        const sorted = [...classAnnouncements].sort((a: Announcement, b: Announcement) => {
+        const sorted = [...response].sort((a: Announcement, b: Announcement) => {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
         setAnnouncements(sorted);
+      } else {
+        setAnnouncements([]);
       }
     } catch (e) {
       console.error('Error loading announcements', e);
       setAnnouncements([]);
     }
   };
-  
-  // Save class data to localStorage whenever it changes
+
+  // Update state when location changes
   useEffect(() => {
-    if (location.state) {
-      const newData = location.state;
-      localStorage.setItem(`classData-${classId}`, JSON.stringify(newData));
-      setClassData(newData);
+    if (location.state && classId) {
+      setClassData(prevData => ({
+        ...prevData,
+        ...location.state
+      }));
     }
   }, [location.state, classId]);
-  
-  // Always check localStorage on mount to ensure we have the most up-to-date data
-  useEffect(() => {
-    const savedData = localStorage.getItem(`classData-${classId}`);
-    if (savedData) {
-      setClassData(JSON.parse(savedData));
-    }
-  }, [classId]);
-  
+
   // Update document title when class data changes
   useEffect(() => {
-    const className = classData.className || 'Class';
+    const className = classData.name || 'Class';
     const section = classData.section ? ` - ${classData.section}` : '';
     document.title = `${className}${section} - Google Classroom`;
   }, [classData]);
-  
+
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState({
     color: classData.color || '#1a73e8',
-    image: classData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
+    image: classData.coverImage || classroomImage
   });
 
   // Get current path to determine active tab
@@ -255,40 +381,52 @@ export default function ClassPage() {
   const isGrades = currentPath.endsWith('/grades');
   const isSubmissions = currentPath.includes('/submissions/');
 
+  // Function to handle theme changes
   const handleThemeChange = (newTheme: { color: string; image: string }) => {
-    setTheme(newTheme);
-    // Save theme to localStorage and update classData
-    if (classId) {
-      const updatedData = { ...classData, color: newTheme.color, coverImage: newTheme.image };
-      setClassData(updatedData);
-      localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
-      
-      // Also update banner images in localStorage to keep them in sync
-      try {
-        const savedBannerImages = localStorage.getItem('bannerImages');
-        let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
-        bannerImagesObj[classId] = newTheme.image;
-        localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
-      } catch (e) {
-        console.error('Error updating banner images', e);
-      }
+    if (!classId || classId === 'undefined') {
+      console.error('Cannot update theme: Invalid course ID');
+      return;
     }
+
+    const updatedClassData: Course = {
+      ...classData,
+      id: classId,
+      courseId: classData.courseId,
+      courseGuid: classData.courseGuid,
+      color: newTheme.color,
+      coverImage: newTheme.image
+    };
+
+    // Update the class data in state immediately
+    setClassData(prevData => ({
+      ...prevData,
+      color: newTheme.color,
+      coverImage: newTheme.image
+    }));
+
+    setTheme(newTheme);
+
+    // Update the course via API - this will use the GUID if available due to our updated API function
+    updateCourse(classData.courseGuid || classId, updatedClassData)
+      .then(() => {
+        // Invalidate course queries to refresh data
+        queryClient.invalidateQueries({ queryKey: ['course', classId] });
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+      })
+      .catch(error => {
+        console.error('Error updating course theme:', error);
+      });
   };
 
-  // Load theme from localStorage when component mounts
+  // Update theme when course data changes
   useEffect(() => {
-    if (classId) {
-      const savedData = localStorage.getItem(`classData-${classId}`);
-      if (savedData) {
-        const parsedData = JSON.parse(savedData);
-        setTheme({
-          color: parsedData.color || '#1a73e8',
-          image: parsedData.coverImage || '/classroom.png' // Use local image as default instead of Unsplash
-        });
-        setClassData(parsedData);
-      }
+    if (courseData) {
+      setTheme({
+        color: courseData.color || '#1a73e8',
+        image: courseData.coverImage || classroomImage
+      });
     }
-  }, [classId]);
+  }, [courseData]);
 
   const isActive = (path: string) => {
     if (path === 'submissions' && isSubmissions) {
@@ -298,11 +436,72 @@ export default function ClassPage() {
   };
 
   const copyClassCode = () => {
-    const code = classData.classCode || 'zrgexl2e';
+    const code = classData.enrollmentCode || 'zrgexl2e';
     navigator.clipboard.writeText(code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  // Remove the IIFE wrapper for the banner and move it to a named function
+  const renderBanner = () => {
+    // Process the banner image URL to make it responsive
+    const finalImageUrl = isValidImageUrl(theme.image)
+      ? (theme.image && theme.image.includes('unsplash.com')
+          ? getResponsiveImageUrl(theme.image)
+          : theme.image)
+      : FALLBACK_IMAGES.default;
+
+    return (
+      <div className="max-w-[1000px] mx-auto px-6 mt-6">
+        <div
+          className="rounded-lg overflow-hidden relative h-[180px] sm:h-[220px] md:h-[250px]"
+          style={{ backgroundColor: theme.color }}
+        >
+          <div className="relative z-10 p-4 sm:p-6 pb-16">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+              <div>
+                <h1 className="text-white text-[24px] sm:text-[32px] font-normal">{classData.name || 'Class'}</h1>
+                <p className="text-white/90 text-lg sm:text-xl mt-1">{classData.section || 'Section'}</p>
+              </div>
+              <button
+                onClick={() => setIsCustomizing(true)}
+                className="bg-white hover:bg-gray-50 text-[#1a73e8] px-3 py-1.5 sm:px-4 sm:py-2 rounded flex items-center gap-2 text-sm font-medium"
+              >
+                <Pencil size={16} className="sm:size-18" />
+                Customize
+              </button>
+            </div>
+          </div>
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
+            <img
+              src={finalImageUrl}
+              alt="Class banner"
+              className="w-full h-full object-cover object-center"
+              onError={(e) => {
+                const img = e.target as HTMLImageElement;
+                console.log('Banner image failed to load, using fallback');
+                // Try the first fallback
+                img.src = FALLBACK_IMAGES.classroom;
+
+                // If the first fallback also fails, use the ultimate fallback
+                img.onerror = () => {
+                  img.src = FALLBACK_IMAGES.default;
+                  img.onerror = null; // Prevent infinite loop
+
+                  // Update the theme with the working fallback image
+                  if (classId) {
+                    const updatedData = { ...classData, coverImage: FALLBACK_IMAGES.default };
+                    setClassData(updatedData);
+                  }
+                };
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -313,7 +512,7 @@ export default function ClassPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full px-3 sm:px-6">
             <nav className="flex flex-wrap w-full sm:w-auto overflow-x-auto">
               <Link
-                to={`/class/${classId}/stream`}
+                to={`/class/${classId}`}
                 state={classData}
                 className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('stream')}`}
               >
@@ -355,141 +554,8 @@ export default function ClassPage() {
           </div>
         </div>
 
-        {/* Helper function to determine responsive image size based on screen width */}
-        {(() => {
-          // Helper function to determine responsive image size based on screen width
-          const getResponsiveImageSize = (): string => {
-            // Default size for larger screens
-            let size = '1600x900';
-            
-            // Check if window is available (client-side)
-            if (typeof window !== 'undefined') {
-              const width = window.innerWidth;
-              
-              if (width < BREAKPOINTS.sm) {
-                // Small mobile devices
-                size = '640x360';
-              } else if (width < BREAKPOINTS.md) {
-                // Larger mobile devices
-                size = '768x432';
-              } else if (width < BREAKPOINTS.lg) {
-                // Tablets
-                size = '1024x576';
-              } else if (width < BREAKPOINTS.xl) {
-                // Small desktops
-                size = '1280x720';
-              }
-            }
-            
-            return size;
-          };
-          
-          // Helper function to update existing Unsplash URLs to be responsive
-          const getResponsiveImageUrl = (url: string): string => {
-            // If it's not an Unsplash URL, return as is
-            if (!url.includes('unsplash.com')) return url;
-            
-            try {
-              // Get the appropriate size for the current device
-              const imageSize = getResponsiveImageSize();
-              
-              // If it's an Unsplash random URL, update the size
-              if (url.includes('unsplash.com/random')) {
-                // Extract the query parameters
-                const queryMatch = url.match(/\?(.+)$/);
-                const query = queryMatch ? queryMatch[1] : '';
-                
-                // Create a new URL with the updated size
-                return `https://source.unsplash.com/random/${imageSize}/${query ? '?' + query : ''}`;
-              }
-              
-              // For specific Unsplash images (not random), we can use the Unsplash API format
-              // Example: https://images.unsplash.com/photo-123456?w=1600&h=900
-              if (url.includes('images.unsplash.com')) {
-                // Remove any existing size parameters
-                const baseUrl = url.split('?')[0];
-                const [width, height] = imageSize.split('x');
-                
-                // Add new responsive size parameters
-                return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
-              }
-            } catch (e) {
-              console.error('Error creating responsive image URL', e);
-            }
-            
-            // Return original URL if any issues occur
-            return url;
-          };
-
-          // Process the banner image URL to make it responsive
-          const processedImageUrl = theme.image && theme.image.includes('unsplash.com') 
-            ? getResponsiveImageUrl(theme.image)
-            : theme.image;
-
-          return (
-            <div className="max-w-[1000px] mx-auto px-6 mt-6">
-              <div 
-                className="rounded-lg overflow-hidden relative h-[180px] sm:h-[220px] md:h-[250px]"
-                style={{ backgroundColor: theme.color }}
-              >
-                <div className="relative z-10 p-4 sm:p-6 pb-16">
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div>
-                      <h1 className="text-white text-[24px] sm:text-[32px] font-normal">{classData.className || 'Class'}</h1>
-                      <p className="text-white/90 text-lg sm:text-xl mt-1">{classData.section || 'Section'}</p>
-                    </div>
-                    <button
-                      onClick={() => setIsCustomizing(true)}
-                      className="bg-white hover:bg-gray-50 text-[#1a73e8] px-3 py-1.5 sm:px-4 sm:py-2 rounded flex items-center gap-2 text-sm font-medium"
-                    >
-                      <Pencil size={16} className="sm:size-18" />
-                      Customize
-                    </button>
-                  </div>
-                </div>
-                <div className="absolute inset-0 z-0">
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
-                  <img 
-                    src={processedImageUrl}
-                    alt="Class banner"
-                    className="w-full h-full object-cover object-center"
-                    onError={(e) => {
-                      const img = e.target as HTMLImageElement;
-                      console.log('Banner image failed to load, using fallback');
-                      // Use local fallback images instead of Unsplash
-                      const fallbackImages = [
-                        '/classroom.png',
-                        'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg',
-                        'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg'
-                      ];
-                      // Try a different fallback image
-                      const randomFallback = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
-                      img.src = randomFallback;
-                      
-                      // Update the theme with the working fallback image
-                      if (classId) {
-                        const updatedData = { ...classData, coverImage: randomFallback };
-                        setClassData(updatedData);
-                        localStorage.setItem(`classData-${classId}`, JSON.stringify(updatedData));
-                        
-                        // Also update banner images in localStorage
-                        try {
-                          const savedBannerImages = localStorage.getItem('bannerImages');
-                          let bannerImagesObj = savedBannerImages ? JSON.parse(savedBannerImages) : {};
-                          bannerImagesObj[classId] = randomFallback;
-                          localStorage.setItem('bannerImages', JSON.stringify(bannerImagesObj));
-                        } catch (e) {
-                          console.error('Error updating banner images', e);
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-        
+        {/* Call the banner rendering function */}
+        {renderBanner()}
 
         {/* Theme Customizer Modal */}
         <ThemeCustomizer
@@ -514,7 +580,7 @@ export default function ClassPage() {
                     </button>
                   </div>
                   <div className="p-3 flex items-center justify-between relative">
-                    <span className="text-[#1a73e8] text-[15px] font-medium tracking-wide">{classData.classCode || 'zrgexl2e'}</span>
+                    <span className="text-[#1a73e8] text-[15px] font-medium tracking-wide">{classData.enrollmentCode || 'zrgexl2e'}</span>
                     {copied && (
                       <div className="absolute left-0 -bottom-8 bg-gray-800 text-white text-xs py-1 px-2 rounded">
                         Copied to clipboard
@@ -524,7 +590,7 @@ export default function ClassPage() {
                       <button className="p-1 hover:bg-[#f8f9fa] rounded-full">
                         <Expand size={18} className="text-[#5f6368]" />
                       </button>
-                      <button 
+                      <button
                         className="p-1 hover:bg-[#f8f9fa] rounded-full"
                         onClick={copyClassCode}
                       >
@@ -571,8 +637,8 @@ export default function ClassPage() {
                     ) : (
                       <p className="text-sm text-[#5f6368]">No work due soon</p>
                     )}
-                    <a 
-                      href="#" 
+                    <a
+                      href="#"
                       onClick={handleViewAllClick}
                       className="block mt-2 text-sm text-[#1a73e8] hover:bg-[#f6fafe] px-2 py-1 -mx-2 rounded"
                     >
@@ -590,9 +656,9 @@ export default function ClassPage() {
                 </div>
 
                 {/* Announcements List */}
-                <AnnouncementList 
-                  announcements={announcements} 
-                  onAnnouncementUpdate={loadAnnouncements} 
+                <AnnouncementList
+                  announcements={announcements}
+                  onAnnouncementUpdate={loadAnnouncements}
                 />
 
                 {/* Upcoming Assignments Modal */}
@@ -603,13 +669,13 @@ export default function ClassPage() {
                     assignments={allUpcomingAssignments}
                   />
                 )}
-                
+
                 {/* Stream Empty State - Only show when there are no announcements */}
                 {announcements.length === 0 && (
                   <div className="bg-white rounded-lg border border-gray-200">
-                    <div className="flex">
-                      <div className="flex items-start p-4">
-                        <svg viewBox="0 0 241 149" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="w-[100px] h-[100px] mt-1">
+                    <div className="flex flex-row w-full">
+                      <div className="flex items-start p-4 w-full flex-wrap md:flex-nowrap">
+                        <svg viewBox="0 0 241 149" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="w-[100px] h-[100px] md:w-[120px] md:h-[120px] mt-1 flex-shrink-0 mx-auto md:mx-0">
                           <path d="M138.19 145.143L136.835 145.664C134.646 146.498 132.249 145.352 131.519 143.164L82.4271 8.37444C81.5933 6.18697 82.7398 3.79117 84.9286 3.06201L86.2836 2.54118C88.4724 1.70786 90.8697 2.85368 91.5993 5.04115L140.691 139.831C141.421 142.018 140.379 144.414 138.19 145.143Z" stroke="#5F6368" strokeWidth="2"/>
                           <path d="M76.6602 10.5686C78.2029 12.2516 83.3923 14.7762 88.4414 13.0932C98.5395 9.72709 96.8565 2.57422 96.8565 2.57422" stroke="#5F6368" strokeWidth="2" strokeLinecap="round"/>
                           <path fillRule="evenodd" clipRule="evenodd" d="M60.1224 147.643C94.7266 135.143 112.55 96.9147 99.938 62.4361C87.4305 27.8532 49.1783 10.1451 14.5742 22.6449L60.1224 147.643ZM65.855 98.4772C77.3203 94.3106 83.2613 81.4983 79.0922 70.0401C74.923 58.4777 62.207 52.5403 50.6376 56.8111L65.855 98.4772Z" fill="#CEEAD6"/>
@@ -639,14 +705,14 @@ export default function ClassPage() {
                           <path d="M172.172 67.3701H216.351" stroke="#5F6368" strokeWidth="2" strokeLinecap="round"/>
                           <path d="M135.145 49.6982L127.151 65.687M116.211 11.8301L118.735 36.6548" stroke="#5F6368" strokeWidth="2" strokeLinecap="round"/>
                         </svg>
-                        <div className="ml-4">
+                        <div className="md:ml-4 flex-1 mt-4 md:mt-0 text-center md:text-left">
                           <h2 className="text-[20px] text-[#3c4043] font-normal mb-1">
                             This is where you can talk to your class
                           </h2>
                           <p className="text-[#5f6368] text-[14px] mb-4">
                             Use the stream to share announcements, post assignments, and respond to student questions
                           </p>
-                          <button className="inline-flex items-center gap-2 px-4 py-1.5 text-[#1a73e8] hover:bg-[#f6fafe] rounded text-sm font-medium">
+                          <button className="inline-flex items-center gap-2 px-4 py-1.5 text-[#1a73e8] hover:bg-[#f6fafe] rounded text-sm font-medium mx-auto md:mx-0">
                             <Settings2 size={16} />
                             Stream settings
                           </button>
@@ -660,11 +726,11 @@ export default function ClassPage() {
           )}
 
           {isClasswork && <ClassworkPage />}
-          
+
           {isPeople && <PeoplePage />}
-          
+
           {isGrades && <GradesPage />}
-          
+
           {isSubmissions && <SubmissionsPage />}
         </div>
       </div>

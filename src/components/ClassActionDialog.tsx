@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { createCourse, enrollCourse } from '../api/courseApi';
 
 interface ClassActionDialogProps {
   isOpen: boolean;
@@ -13,31 +14,47 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
   const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [classCode, setClassCode] = useState('');
   const [className, setClassName] = useState('');
   const [section, setSection] = useState('');
   const [subject, setSubject] = useState('');
   const [room, setRoom] = useState('');
-  const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(true);
-  const [acceptedWorkspaceTerms, setAcceptedWorkspaceTerms] = useState(false);
+  const [enrollmentCode, setEnrollmentCode] = useState('');
+
+  // Reset form fields when dialog opens or type changes
+  React.useEffect(() => {
+    setClassName('');
+    setSection('');
+    setSubject('');
+    setRoom('');
+    setEnrollmentCode('');
+  }, [isOpen, type]);
 
   if (!isOpen) return null;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    if (name === 'name') {
-      setClassName(value);
-    } else if (name === 'section') {
-      setSection(value);
-    } else if (name === 'subject') {
-      setSubject(value);
-    } else if (name === 'room') {
-      setRoom(value);
+    switch (name) {
+      case 'name':
+        setClassName(value);
+        break;
+      case 'section':
+        setSection(value);
+        break;
+      case 'subject':
+        setSubject(value);
+        break;
+      case 'room':
+        setRoom(value);
+        break;
+      case 'classCode':
+        setEnrollmentCode(value);
+        break;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (type === 'create') {
       // Only create class if name is provided
       if (!className.trim()) {
@@ -45,13 +62,6 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
         return;
       }
       
-      // Generate a class code
-      let classCode = '';
-      const characters = 'abcdefghijkmnpqrstuvwxyz23456789';
-      for (let i = 0; i < 7; i++) {
-        classCode += characters.charAt(Math.floor(Math.random() * characters.length));
-      }
-
       // Random theme colors
       const colors = ['#1a73e8', '#1e8e3e', '#d93025', '#4285f4', '#f8836b', '#ff8a65', '#3c4043'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
@@ -77,114 +87,65 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
       // Create random Unsplash URL with timestamp to prevent caching
       const randomImage = `https://source.unsplash.com/random/1600x900/?${randomKeyword1},${randomKeyword2}&t=${Date.now()}`;
       
-      // Create class data object
-      const classData = { 
-        id: classCode,
+      // Create course data object to send to the API
+      const courseData = { 
         name: className.trim(),
         section: section.trim() || "Batch 1",
         teacherName: user?.name || 'You',
-        coverImage: randomImage,
-        enrollmentCode: classCode,
+        subject: subject.trim(),
+        room: room.trim(),
         color: randomColor,
         textColor: 'white',
-        subject: subject.trim(),
-        room: room.trim()
+        coverImage: randomImage
       };
       
-      // Save to localStorage before navigating
-      localStorage.setItem(`classData-${classCode}`, JSON.stringify(classData));
+      try {
+        // Call the API to create a new course
+        const createdCourse = await createCourse(courseData);
+        console.log('Created new course:', createdCourse);
+        
+        // Invalidate courses query to refresh data
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+        
+        // Navigate to the new class page using the appropriate ID (courseGuid, courseId, or id)
+        const courseId = createdCourse.courseGuid || createdCourse.courseId?.toString() || createdCourse.id;
+        navigate(`/class/${courseId}`, { 
+          state: { 
+            className: createdCourse.name, 
+            section: createdCourse.section,
+            coverImage: randomImage,
+            color: randomColor
+          }
+        });
+      } catch (error) {
+        console.error('Error creating course:', error);
+        alert('Failed to create course. Please try again.');
+      }
+    } else if (type === 'join') {
+      // Join existing class
+      if (!enrollmentCode) {
+        alert("Please enter a class code");
+        return;
+      }
       
-      // Dispatch custom event to update sidebar immediately
-      const newClassObj = {
-        id: classCode,
-        name: className.trim(),
-        section: section.trim() || "Batch 1",
-        color: randomColor
-      };
-      
-      // Create and dispatch a custom event to update the sidebar
-      // Using a more specific event name to avoid conflicts
-      const classCreatedEvent = new CustomEvent('class-created', { 
-        detail: { action: 'addClass', class: newClassObj } 
-      });
-      window.dispatchEvent(classCreatedEvent);
-      
-      // Also dispatch the storage event for backward compatibility
-      const storageEvent = new CustomEvent('storage', { 
-        detail: { action: 'addClass', class: newClassObj } 
-      });
-      window.dispatchEvent(storageEvent);
-      
-      // Invalidate courses query to trigger a refetch on HomePage
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      
-      // Navigate to the new class page
-      navigate(`/class/${classCode}`, { state: { 
-        className: classData.name, 
-        section: classData.section 
-      }});
+      try {
+        // Call the API to join a course with the enrollment code
+        await enrollCourse(enrollmentCode);
+        
+        // Invalidate courses query to refresh data
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+        
+        // Navigate to home page to see the joined class
+        navigate('/');
+        
+      } catch (error) {
+        console.error('Error joining course:', error);
+        alert('Failed to join class. Please check the class code and try again.');
+      }
     }
+    
     onClose();
   };
-
-  if (showWorkspaceDialog) {
-    return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg w-full max-w-[450px] overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-[22px] font-normal text-[#3c4043]">Using Classroom at a school with students?</h2>
-          </div>
-          <div className="p-6">
-            <p className="text-[#3c4043] mb-4">
-              If so, your school must sign up for a{' '}
-              <a href="#" className="text-[#1a73e8] hover:underline">
-                Google Workspace for Education
-              </a>{' '}
-              account before you can use Classroom.{' '}
-              <a href="#" className="text-[#1a73e8] hover:underline">
-                Learn More
-              </a>
-            </p>
-            <p className="text-[#3c4043] mb-6">
-              Google Workspace for Education lets schools decide which Google services their students can use, and provides additional{' '}
-              <a href="#" className="text-[#1a73e8] hover:underline">
-                privacy and security
-              </a>{' '}
-              protections that are important in a school setting. Students cannot use Google Classroom at a school with personal accounts.
-            </p>
-            <div className="bg-[#f8f9fa] p-4 rounded-lg mb-6">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={acceptedWorkspaceTerms}
-                  onChange={(e) => setAcceptedWorkspaceTerms(e.target.checked)}
-                />
-                <span className="text-sm text-[#3c4043]">
-                  I've read and understand the above notice, and I'm not using Classroom at a school with students
-                </span>
-              </label>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={onClose}
-                className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
-              >
-                Go back
-              </button>
-              <button
-                onClick={() => setShowWorkspaceDialog(false)}
-                disabled={!acceptedWorkspaceTerms}
-                className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -194,58 +155,37 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-[22px] font-normal text-[#3c4043]">Join class</h2>
             </div>
-            <div className="p-6">
+            <form onSubmit={handleSubmit} className="p-6">
+              <p className="text-sm text-[#5f6368] mb-4">
+                Ask your teacher for the class code, then enter it here.
+              </p>
               <div className="mb-6">
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f8f9fa] mb-6">
-                  <img
-                    src={`data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDABQODxIPDRQSEBIXFRQdHx4eHRoaHSQtJSEkMj4xLy4vMTQ6PTo0OjQ5MDc2QEA2OkU9O0RERVlJVENWd1ZFWUf/2wBDAR`} 
-                    alt="User"
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <div>
-                    <p className="text-sm text-[#3c4043]">You're currently signed in as</p>
-                    <p className="text-sm text-[#3c4043] font-medium">{user?.email || 'user@example.com'}</p>
-                  </div>
-                  <button className="ml-auto text-[#1a73e8] text-sm font-medium">
-                    Switch account
-                  </button>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-sm text-[#3c4043] mb-1">
-                    Class code
-                  </label>
-                  <p className="text-sm text-[#5f6368] mb-4">
-                    Ask your teacher for the class code, then enter it here.
-                  </p>
-                </div>
                 <input
                   type="text"
+                  name="classCode"
                   placeholder="Class code"
-                  value={classCode}
-                  onChange={(e) => setClassCode(e.target.value)}
+                  value={enrollmentCode}
+                  onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8]"
                 />
-                <p className="mt-2 text-xs text-[#5f6368]">
-                  Use a class code with 5-8 letters or numbers, and no spaces or symbols
-                </p>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2 text-[#1a73e8] font-medium hover:bg-[#f6fafe] rounded"
+                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="px-6 py-2 bg-[#1a73e8] text-white font-medium rounded hover:bg-[#1557b0] disabled:opacity-50 disabled:hover:bg-[#1a73e8]"
-                  disabled={!classCode}
+                  disabled={!enrollmentCode}
                 >
                   Join
                 </button>
               </div>
-            </div>
+            </form>
           </>
         ) : (
           <>
@@ -306,7 +246,7 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-[#1a73e8] text-white rounded-md font-medium hover:bg-[#1557b0] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!className}
                 >
                   Create

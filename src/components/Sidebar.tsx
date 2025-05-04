@@ -15,6 +15,8 @@ import {
   Menu,
   Plus
 } from 'lucide-react';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { createCourse, getCourses, deleteCourse } from '../api/courseApi';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -36,6 +38,15 @@ interface Class {
   color?: string;
 }
 
+// Function to generate a unique key even for items with undefined IDs
+const generateUniqueKey = (prefix: string, item: Class) => {
+  if (!item.id || item.id === 'undefined') {
+    // Use name and section with a timestamp to create unique key
+    return `${prefix}-${item.name}-${item.section}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+  return `${prefix}-${item.id}`;
+};
+
 export default function Sidebar({ isCollapsed }: SidebarProps) {
   // State to track screen size
   const [isMobile, setIsMobile] = useState(false);
@@ -49,75 +60,33 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     color: '#4285f4'
   });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // Define loadClasses function at component level so it can be referenced throughout the component
-  const loadClasses = () => {
-    console.log("Loading classes for sidebar...");
+  // Use React Query to fetch courses
+  const { data: courses, isLoading: isLoadingCourses } = useQuery({
+    queryKey: ['courses'],
+    queryFn: getCourses,
+    refetchOnWindowFocus: true,
+  });
 
-    // Get all classes from localStorage first
-    const allClasses: Record<string, any> = {};
-
-    // First check for any manually created classes in localStorage
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('classData-')) {
-        try {
-          const rawData = localStorage.getItem(key) || '';
-
-          const classData = JSON.parse(rawData);
-          const classId = key.replace('classData-', '');
-
-          if (classData && classData.name && classData.name.trim() !== '' && classData.name !== 'Unnamed Class') {
-            console.log(`Found class: ${classData.name} (${classId})`);
-            allClasses[classId] = {
-              id: classId,
-              name: classData.name,
-              section: classData.section || '',
-              color: classData.color || '#4285f4'
-            };
-          }
-        } catch (e) {
-          console.error('Error loading class from localStorage', e);
-        }
-      }
+  // Update teaching classes when courses data changes
+  useEffect(() => {
+    if (courses) {
+      const formattedCourses = courses.map(course => ({
+        id: course.id,
+        name: course.name,
+        section: course.section || '',
+        color: course.color || '#4285f4'
+      }));
+      setTeachingClasses(formattedCourses);
     }
+  }, [courses]);
 
-    // Add default classes only if they don't exist in localStorage
-    const defaultClasses = [
-      {
-        id: 'ui-ux-1',
-        name: 'UI/UX',
-        section: 'Batch 1',
-        color: '#3c4043'
-      },
-      {
-        id: 'fullstack-2',
-        name: 'FullStack',
-        section: 'Batch 2',
-        color: '#f8836b'
-      },
-      {
-        id: 'riso-2',
-        name: 'RISO',
-        section: 'Batch-2',
-        color: '#ff8a65'
-      }
-    ];
-
-    // Add default classes to our collection if not already present
-    defaultClasses.forEach(cls => {
-      if (!allClasses[cls.id]) {
-        allClasses[cls.id] = cls;
-      }
-    });
-
-    // Convert the object to an array of classes
-    const finalClasses = Object.values(allClasses);
-
-    console.log("Final classes for sidebar:", finalClasses);
-
-    // Update the teaching classes state
-    setTeachingClasses(finalClasses);
+  // Legacy loadClasses function (now empty, keeping for backward compatibility with event handlers)
+  const loadClasses = () => {
+    // This function is now a no-op, as we're using React Query
+    // Invalidate the courses query to trigger a refetch
+    queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 
   useEffect(() => {
@@ -223,41 +192,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
   // Function to get the cover image for a class with responsive sizing
   const getCoverImageForClass = (classId: string, className: string): string => {
-    // First try to get from localStorage class data
-    const savedData = localStorage.getItem(`classData-${classId}`);
-    if (savedData) {
-      try {
-        const classData = JSON.parse(savedData);
-        if (classData.coverImage) {
-          // If the saved image is from Unsplash, make it responsive
-          if (classData.coverImage.includes('unsplash.com')) {
-            return getResponsiveImageUrl(classData.coverImage);
-          }
-          return classData.coverImage;
-        }
-      } catch (e) {
-        console.error('Error parsing class data', e);
-      }
-    }
-
-    // Then try from banner images
-    const savedBannerImages = localStorage.getItem('bannerImages');
-    if (savedBannerImages) {
-      try {
-        const bannerImages = JSON.parse(savedBannerImages);
-        if (bannerImages[classId]) {
-          // If the saved image is from Unsplash, make it responsive
-          if (bannerImages[classId].includes('unsplash.com')) {
-            return getResponsiveImageUrl(bannerImages[classId]);
-          }
-          return bannerImages[classId];
-        }
-      } catch (e) {
-        console.error('Error parsing banner images', e);
-      }
-    }
-
-    // Default to a class-specific image if all else fails
+    // Generate a class-specific image based on the class name
     let query = 'education,classroom';
     if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
       query = 'ui,design';
@@ -268,7 +203,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     } else if (className.toLowerCase().includes('cloud')) {
       query = 'technology,cloud,computing';
     }
-
+    
     // Get responsive image size based on screen width
     const imageSize = getResponsiveImageSize();
     return `https://source.unsplash.com/random/${imageSize}/?${query}`;
@@ -342,59 +277,51 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     e.preventDefault();
     if (!newClass.name) return;
 
-    const id = `class-${Date.now()}`;
-    const coverImage = getCoverImageForClass(id, newClass.name);
+    const coverImage = getCoverImageForClass('temp-id', newClass.name);
 
-    const classToSave = {
-      id,
+    // Create the course data
+    const courseData = {
       name: newClass.name,
       section: newClass.section || '',
       teacherName: 'You',
-      enrollmentCode: `code-${Date.now().toString().slice(-6)}`,
       color: newClass.color || '#4285f4',
       textColor: 'white',
-      coverImage: coverImage
+      subject: '',
+      room: ''
     };
 
-    try {
-      // Save to localStorage with reliable key format
-      localStorage.setItem(`classData-${id}`, JSON.stringify(classToSave));
+    // Call the API to create the course
+    createCourse(courseData)
+      .then(createdCourse => {
+        console.log('Created new course:', createdCourse);
 
-      // Create a new class object for state update
-      const newClassObj = {
-        id: classToSave.id,
-        name: classToSave.name,
-        section: classToSave.section,
-        color: classToSave.color
-      };
+        // Create a new class object for state update
+        const newClassObj = {
+          id: createdCourse.id,
+          name: createdCourse.name,
+          section: createdCourse.section,
+          color: createdCourse.color
+        };
 
-      // Update state immediately with functional update
-      setTeachingClasses(prevClasses => {
-        const updatedClasses = [...prevClasses, newClassObj];
-        return updatedClasses;
+        // Update state immediately with functional update
+        setTeachingClasses(prevClasses => {
+          const updatedClasses = [...prevClasses, newClassObj];
+          return updatedClasses;
+        });
+
+        // Invalidate courses query to refresh data
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+
+        // Close modal and reset form
+        setShowCreateModal(false);
+        setNewClass({ name: '', section: '', color: '#4285f4' });
+
+        // Navigate to the new class page
+        navigate(`/class/${createdCourse.id}`);
+      })
+      .catch(error => {
+        console.error('Error creating class:', error);
       });
-
-      // Dispatch storage event to trigger updates across tabs
-      window.dispatchEvent(new Event('storage'));
-
-      // Dispatch custom event for class creation
-      const classCreatedEvent = new CustomEvent('class-created', {
-        detail: {
-          action: 'addClass',
-          class: newClassObj
-        }
-      });
-      window.dispatchEvent(classCreatedEvent);
-
-      // Close modal and reset form
-      setShowCreateModal(false);
-      setNewClass({ name: '', section: '', color: '#4285f4' });
-
-      // Navigate to the new class page
-      navigate(`/class/${id}`);
-    } catch (error) {
-      console.error('Error creating class:', error);
-    }
   };
 
   // Toggle sidebar visibility on mobile
@@ -421,6 +348,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       {/* Backdrop overlay for mobile */}
       {isMobile && isSidebarVisible && (
         <div
+          key="mobile-backdrop-overlay"
           className="fixed inset-0 bg-black bg-opacity-50 z-20 transition-opacity duration-300"
           onClick={toggleMobileSidebar}
           aria-hidden="true"
@@ -429,7 +357,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
       {/* Mobile create class button */}
       {isMobile && (
-        <div className="fixed right-4 bottom-4 z-40">
+        <div className="fixed right-4 bottom-4 z-40" key="mobile-create-button">
           <button
             onClick={openCreateClassModal}
             className="p-3 bg-[#1a73e8] rounded-full shadow-lg text-white hover:bg-[#1557b0] transition-colors"
@@ -442,7 +370,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
       {/* Mobile menu toggle button */}
       {isMobile && !isSidebarVisible && (
-        <div className="fixed left-4 top-4 z-40">
+        <div className="fixed left-4 top-4 z-40" key="mobile-menu-toggle">
           <button
             onClick={toggleMobileSidebar}
             className="p-2 bg-white rounded-full shadow-md text-[#3c4043] hover:bg-gray-100 transition-colors"
@@ -466,7 +394,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       >
         {/* Mobile close button */}
         {isMobile && isSidebarVisible && (
-          <div className="absolute top-0 left-0 right-0 h-16 bg-white flex items-center justify-between px-4 border-b">
+          <div className="absolute top-0 left-0 right-0 h-16 bg-white flex items-center justify-between px-4 border-b" key="mobile-close-button">
             <div className="flex items-center">
               <GraduationCap size={24} className="text-[#1a73e8] mr-2" />
               <span className="font-medium text-[#3c4043]">Classroom</span>
@@ -482,7 +410,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         )}
         <nav className="py-3 px-2 relative">
           {navItems.map((item) => (
-            <div key={item.to} className="relative">
+            <div key={`nav-item-${item.to}`} className="relative">
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
@@ -507,18 +435,18 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 <>
                   <span className="text-sm flex-1 text-left">Teaching</span>
                   {isTeachingOpen ? (
-                    <ChevronUp size={20} strokeWidth={1.5} />
+                    <ChevronUp size={20} strokeWidth={1.5} key="teaching-chevron-up" />
                   ) : (
-                    <ChevronDown size={20} strokeWidth={1.5} />
+                    <ChevronDown size={20} strokeWidth={1.5} key="teaching-chevron-down" />
                   )}
                 </>
               )}
             </button>
             {(isCollapsed || isTeachingOpen) && (
-              <div>
+              <div key="teaching-items-container">
                 {teachingItems.map((item) => (
                   <NavLink
-                    key={item.to}
+                    key={`teaching-item-${item.to}`}
                     to={item.to}
                     className={({ isActive }) =>
                       `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
@@ -532,55 +460,54 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 ))}
 
                 {/* Teaching Classes */}
-                {!isCollapsed && teachingClasses.map((classItem) => (
-                  <div key={classItem.id} className="group relative flex items-center">
-                    <Link
-                      to={`/class/${classItem.id}`}
-                      state={{
-                        className: classItem.name,
-                        section: classItem.section,
-                        color: classItem.color,
-                        coverImage: getCoverImageForClass(classItem.id, classItem.name)
-                      }}
-                      className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
-                    >
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                        style={{ backgroundColor: classItem.color || '#4285f4' }}
+                {!isCollapsed && teachingClasses.map((classItem, index) => {
+                  // Generate a unique key for each teaching class item
+                  const uniqueKey = generateUniqueKey('teaching-class', classItem);
+                  return (
+                    <div key={uniqueKey} className="group relative flex items-center">
+                      <Link
+                        to={`/class/${classItem.id}`}
+                        state={{
+                          className: classItem.name,
+                          section: classItem.section,
+                          color: classItem.color,
+                          coverImage: getCoverImageForClass(classItem.id, classItem.name)
+                        }}
+                        className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
                       >
-                        {(classItem.name || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="overflow-hidden">
-                        <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
-                        <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
-                      </div>
-                    </Link>
-                    <button
-                      onClick={() => {
-                        // Remove the class from localStorage
-                        localStorage.removeItem(`classData-${classItem.id}`);
-
-                        // We intentionally don't remove banner images to prevent side effects
-                        // This ensures that if you recreate a class with the same ID, the banner image is preserved
-
-                        // Dispatch custom event for class removal
-                        const classRemovedEvent = new CustomEvent('class-removed', {
-                          detail: {
-                            action: 'removeClass',
-                            classId: classItem.id
-                          }
-                        });
-                        window.dispatchEvent(classRemovedEvent);
-
-                        // Also update local state
-                        setTeachingClasses(prevClasses => prevClasses.filter(cls => cls.id !== classItem.id));
-                      }}
-                      className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
-                    >
-                      <X size={16} className="text-gray-500" />
-                    </button>
-                  </div>
-                ))}
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                          style={{ backgroundColor: classItem.color || '#4285f4' }}
+                        >
+                          {(classItem.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="overflow-hidden">
+                          <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
+                          <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
+                        </div>
+                      </Link>
+                      <button
+                        onClick={() => {
+                          // Delete the course via API
+                          deleteCourse(classItem.id)
+                            .then(() => {
+                              console.log(`Deleted course: ${classItem.id}`);
+                              // Update local state
+                              setTeachingClasses(prevClasses => prevClasses.filter(cls => cls.id !== classItem.id));
+                              // Invalidate course queries to refresh data
+                              queryClient.invalidateQueries({ queryKey: ['courses'] });
+                            })
+                            .catch(error => {
+                              console.error(`Failed to delete course ${classItem.id}:`, error);
+                            });
+                        }}
+                        className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
+                      >
+                        <X size={16} className="text-gray-500" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -595,18 +522,18 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 <>
                   <span className="text-sm flex-1 text-left">Enrolled</span>
                   {isEnrolledOpen ? (
-                    <ChevronUp size={20} strokeWidth={1.5} />
+                    <ChevronUp size={20} strokeWidth={1.5} key="enrolled-chevron-up" />
                   ) : (
-                    <ChevronDown size={20} strokeWidth={1.5} />
+                    <ChevronDown size={20} strokeWidth={1.5} key="enrolled-chevron-down" />
                   )}
                 </>
               )}
             </button>
             {(isCollapsed || isEnrolledOpen) && (
-              <div>
+              <div key="enrolled-items-container">
                 {enrolledItems.map((item) => (
                   <NavLink
-                    key={item.to}
+                    key={`enrolled-item-${item.to}`}
                     to={item.to}
                     className={({ isActive }) =>
                       `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
@@ -625,7 +552,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           <div className="mt-4 pt-4 border-t">
             {bottomNavItems.map((item) => (
               <NavLink
-                key={item.to}
+                key={`bottom-nav-${item.to}`}
                 to={item.to}
                 className={({ isActive }) =>
                   `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full ${
@@ -643,7 +570,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
       {/* Create Class Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" key="create-class-modal">
           <div
             className="bg-white w-full max-w-[500px] mx-4 rounded-lg shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
@@ -683,9 +610,9 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Choose class color</label>
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                    {['#4285f4', '#0f9d58', '#f4b400', '#db4437', '#673ab7', '#ff6d00', '#795548'].map(color => (
+                    {['#4285f4', '#0f9d58', '#f4b400', '#db4437', '#673ab7', '#ff6d00', '#795548'].map((color, index) => (
                       <button
-                        key={color}
+                        key={`color-${index}-${color.replace('#', '')}`}
                         type="button"
                         className={`w-8 h-8 sm:w-6 sm:h-6 rounded-full ${newClass.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
                         style={{ backgroundColor: color }}
