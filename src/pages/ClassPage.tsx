@@ -102,8 +102,51 @@ const isValidImageUrl = (url: string | undefined | null): boolean => {
   if (!url) return false;
   if (url === 'string') return false;
   if (url.includes('http://localhost:3003/string')) return false;
-  if (url.includes('http://localhost:3003/src/assets/')) return false; // Direct URL references to local assets won't work
+  if (url.includes('http://localhost:3003/src/assets/')) return false; 
+  if (url.includes('unsplash.com')) {
+    // Skip unsplash URLs to avoid rate limiting
+    return false;
+  }
   return true;
+};
+
+// Helper function to get a static image instead of requesting from Unsplash
+const getStaticImage = (className: string): string => {
+  // Map of education-related keywords to specific static images
+  const imageMap: {[key: string]: string} = {
+    'math': 'https://images.pexels.com/photos/6238297/pexels-photo-6238297.jpeg',
+    'science': 'https://images.pexels.com/photos/2280571/pexels-photo-2280571.jpeg',
+    'english': 'https://images.pexels.com/photos/3648262/pexels-photo-3648262.jpeg',
+    'history': 'https://images.pexels.com/photos/5835460/pexels-photo-5835460.jpeg',
+    'computer': 'https://images.pexels.com/photos/1181373/pexels-photo-1181373.jpeg',
+    'art': 'https://images.pexels.com/photos/1646953/pexels-photo-1646953.jpeg',
+    'music': 'https://images.pexels.com/photos/4473871/pexels-photo-4473871.jpeg',
+    'physical': 'https://images.pexels.com/photos/6253311/pexels-photo-6253311.jpeg',
+    'language': 'https://images.pexels.com/photos/267669/pexels-photo-267669.jpeg',
+    'biology': 'https://images.pexels.com/photos/2280571/pexels-photo-2280571.jpeg',
+    'chemistry': 'https://images.pexels.com/photos/2280549/pexels-photo-2280549.jpeg',
+    'physics': 'https://images.pexels.com/photos/714699/pexels-photo-714699.jpeg',
+    'geography': 'https://images.pexels.com/photos/269724/pexels-photo-269724.jpeg',
+    'psychology': 'https://images.pexels.com/photos/1367227/pexels-photo-1367227.jpeg',
+    'programming': 'https://images.pexels.com/photos/546819/pexels-photo-546819.jpeg',
+    'design': 'https://images.pexels.com/photos/326501/pexels-photo-326501.jpeg',
+    'business': 'https://images.pexels.com/photos/936137/pexels-photo-936137.jpeg',
+  };
+  
+  // Convert to lowercase for case-insensitive matching
+  const lowerClassName = className.toLowerCase();
+  
+  // Try to find a matching keyword
+  for (const keyword in imageMap) {
+    if (lowerClassName.includes(keyword)) {
+      return imageMap[keyword];
+    }
+  }
+  
+  // Get a random image if no specific match found
+  const randomImages = Object.values(imageMap);
+  const randomIndex = Math.floor(Math.random() * randomImages.length);
+  return randomImages[randomIndex];
 };
 
 export default function ClassPage() {
@@ -332,19 +375,17 @@ export default function ClassPage() {
         return;
       }
 
-      // Use API call instead of localStorage
-      const response = await getAnnouncements(classId);
-      if (response && Array.isArray(response)) {
-        // Sort by creation date (newest first)
-        const sorted = [...response].sort((a: Announcement, b: Announcement) => {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
-        setAnnouncements(sorted);
-      } else {
-        setAnnouncements([]);
-      }
-    } catch (e) {
-      console.error('Error loading announcements', e);
+      // Use API call to get announcements
+      const announcementsData = await getAnnouncements(classId);
+      
+      // Sort by creation date (newest first)
+      const sorted = [...announcementsData].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setAnnouncements(sorted);
+    } catch (error) {
+      console.error(`Error loading announcements for class ${classId}:`, error);
       setAnnouncements([]);
     }
   };
@@ -446,11 +487,14 @@ export default function ClassPage() {
   // Remove the IIFE wrapper for the banner and move it to a named function
   const renderBanner = () => {
     // Process the banner image URL to make it responsive
-    const finalImageUrl = isValidImageUrl(theme.image)
-      ? (theme.image && theme.image.includes('unsplash.com')
-          ? getResponsiveImageUrl(theme.image)
-          : theme.image)
-      : FALLBACK_IMAGES.default;
+    let finalImageUrl = FALLBACK_IMAGES.default;
+    
+    if (isValidImageUrl(theme.image)) {
+      finalImageUrl = theme.image;
+    } else {
+      // Use a static image based on class name instead of unsplash
+      finalImageUrl = getStaticImage(classData.name || 'Class');
+    }
 
     return (
       <div className="max-w-[1000px] mx-auto px-6 mt-6">

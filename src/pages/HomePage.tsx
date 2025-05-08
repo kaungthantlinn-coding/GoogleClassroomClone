@@ -255,6 +255,18 @@ export default function HomePage() {
     },
   });
 
+  // Fetch course images for all courses that need them - MOVED AFTER courses is defined
+  useEffect(() => {
+    if (courses) {
+      courses.forEach(course => {
+        const cardId = (course.courseId ? course.courseId.toString() : course.id) || generateUniqueKey('card', course);
+        if (course.name && !isValidImageUrl(courseImages[cardId])) {
+          fetchCourseImage(cardId, course.name);
+        }
+      });
+    }
+  }, [courses, courseImages]);
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading courses...</div>;
   }
@@ -301,13 +313,6 @@ export default function HomePage() {
     // Use saved theme data if available
     const cardColor = classData.color || '#1a73e8';
     const cardId = (classData.courseId ? classData.courseId.toString() : classData.id) || generateUniqueKey('card', classData);
-    
-    // Get banner image or use API to generate one if not exists
-    useEffect(() => {
-      if (classData.name && !isValidImageUrl(courseImages[cardId])) {
-        fetchCourseImage(cardId, classData.name);
-      }
-    }, [cardId, classData.name]);
     
     // Try to use cached image first, then coverImage from course data, then default
     let cardImage = courseImages[cardId] || classData.coverImage;
@@ -490,14 +495,14 @@ export default function HomePage() {
               >
                 <div className="relative" key={`content-${courseKey}`}>
                   <Link
-                    to={`/class/${course.courseGuid || course.courseId || course.id}`}
+                    to={`/class/${course.courseId}`}
                     state={{
                       className: course.name,
                       section: course.section,
                       classCode: course.enrollmentCode,
                       color: course.color || '#1a73e8',
-                      coverImage: isValidImageUrl(courseImages[course.courseId || course.id]) 
-                        ? courseImages[course.courseId || course.id] 
+                      coverImage: isValidImageUrl(courseImages[course.courseId]) 
+                        ? courseImages[course.courseId] 
                         : (isValidImageUrl(course.coverImage) ? course.coverImage : FALLBACK_IMAGES.default)
                     }}
                     className="block rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300"
@@ -551,14 +556,14 @@ export default function HomePage() {
                 <div className="bg-white p-3 flex justify-end items-center gap-4 h-[60px]" key={`footer-${courseKey}`}>
                   <Link 
                     key={`people-${courseKey}`}
-                    to={`/class/${course.courseGuid || course.courseId || course.id}/people`}
+                    to={`/class/${course.courseId}/people`}
                     className="text-[#5f6368] hover:text-[#3c4043] p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
                   >
                     <Users size={20} strokeWidth={1.5} />
                   </Link>
                   <Link 
                     key={`materials-${courseKey}`}
-                    to={`/class/${course.courseGuid || course.courseId || course.id}/materials`}
+                    to={`/class/${course.courseId}/materials`}
                     className="text-[#5f6368] hover:text-[#3c4043] p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
                   >
                     <Folder size={20} strokeWidth={1.5} />

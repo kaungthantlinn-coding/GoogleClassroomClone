@@ -40,14 +40,36 @@ const DEFAULT_AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA
 
 // Add token to requests if available
 const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+  // First try to get token from sessionStorage
   let token = sessionStorage.getItem('auth_token');
+  
+  // Then try localStorage as fallback
+  if (!token) {
+    token = localStorage.getItem('auth_token');
+  }
+  
+  // Check for token in cookies as a third option
+  if (!token) {
+    const cookies = document.cookie.split(';');
+    const authCookie = cookies.find(cookie => cookie.trim().startsWith('auth_token='));
+    if (authCookie) {
+      token = authCookie.split('=')[1];
+    }
+  }
   
   // For development purposes, if no token exists, use the default token
   if (!token) {
     token = DEFAULT_AUTH_TOKEN;
     console.warn('Using default auth token. In production, this should be a user-specific token.');
-    // Store it in session for future requests
-    sessionStorage.setItem('auth_token', token);
+    // Store it in sessionStorage for future requests
+    try {
+      sessionStorage.setItem('auth_token', token);
+      
+      // Also store in localStorage for persistence
+      localStorage.setItem('auth_token', token);
+    } catch (e) {
+      console.error('Failed to store token in storage:', e);
+    }
   }
   
   if (token) {
@@ -55,6 +77,31 @@ const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestC
   }
   return config;
 };
+
+// Add response interceptor to handle token refresh if needed
+courseApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // If the error is 401 and we haven't already tried to refresh the token
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      // Reset the token to the default token in development
+      sessionStorage.setItem('auth_token', DEFAULT_AUTH_TOKEN);
+      localStorage.setItem('auth_token', DEFAULT_AUTH_TOKEN);
+      
+      // Update the Authorization header with the default token
+      originalRequest.headers.Authorization = `Bearer ${DEFAULT_AUTH_TOKEN}`;
+      
+      // Retry the original request with the new token
+      return courseApi(originalRequest);
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 courseApi.interceptors.request.use(addAuthToken);
 
@@ -104,6 +151,56 @@ const handleApiError = (error: any, defaultMessage: string) => {
   throw new Error(defaultMessage);
 };
 
+// Add a cache for course data to reduce duplicate API calls
+const courseCache: Record<string, { data: any; timestamp: number }> = {};
+const CACHE_TTL = 60000; // 1 minute cache for courses
+
+// Helper function to get course data with caching
+const getCachedCourse = async (id: string): Promise<Course> => {
+  // Normalize the ID to handle different formats
+  const normalizedId = id.trim().toLowerCase();
+  
+  // Check if we have this course in the cache
+  if (courseCache[normalizedId] && (Date.now() - courseCache[normalizedId].timestamp) < CACHE_TTL) {
+    console.log(`Using cached course data for ID: ${id}`);
+    return courseCache[normalizedId].data;
+  }
+  
+  try {
+    // Check if the id is a GUID (contains hyphens)
+    const isGuid = normalizedId.includes('-');
+    
+    let response;
+    if (isGuid) {
+      response = await courseApi.get<Course>(`/guid/${id}`);
+    } else {
+      response = await courseApi.get<Course>(`/${id}`);
+    }
+    
+    // Map API response to expected frontend format if needed
+    const courseData = response.data;
+    if (courseData.courseId && !courseData.id) {
+      courseData.id = courseData.courseId.toString();
+    }
+    
+    // Store in cache using multiple keys for different IDs
+    const now = Date.now();
+    courseCache[normalizedId] = { data: courseData, timestamp: now };
+    
+    // Also cache by numeric ID and GUID if available
+    if (courseData.courseId) {
+      courseCache[courseData.courseId.toString()] = { data: courseData, timestamp: now };
+    }
+    if (courseData.courseGuid) {
+      courseCache[courseData.courseGuid.toLowerCase()] = { data: courseData, timestamp: now };
+    }
+    
+    return courseData;
+  } catch (error) {
+    throw error;
+  }
+};
+
 // API Functions
 export const getCourses = async (): Promise<Course[]> => {
   try {
@@ -121,23 +218,7 @@ export const getCourseById = async (id: string): Promise<Course> => {
   }
   
   try {
-    // Check if the id is a GUID (contains hyphens)
-    const isGuid = id.includes('-');
-    
-    let response;
-    if (isGuid) {
-      response = await courseApi.get<Course>(`/guid/${id}`);
-    } else {
-      response = await courseApi.get<Course>(`/${id}`);
-    }
-    
-    // Map API response to expected frontend format if needed
-    const courseData = response.data;
-    if (courseData.courseId && !courseData.id) {
-      courseData.id = courseData.courseId.toString();
-    }
-    
-    return courseData;
+    return await getCachedCourse(id);
   } catch (error) {
     return handleApiError(error, `Failed to fetch course with ID ${id}`);
   }

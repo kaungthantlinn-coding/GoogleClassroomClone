@@ -40,6 +40,8 @@ export function register(config?: Config) {
 }
 
 function registerValidSW(swUrl: string, config?: Config) {
+  // We don't add message event listeners here anymore - they should be in the service worker script itself
+
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {

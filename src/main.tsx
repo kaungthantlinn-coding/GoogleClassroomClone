@@ -55,21 +55,41 @@ root.render(
   </StrictMode>
 );
 
-// Only register service worker in production
-if (process.env.NODE_ENV === 'production') {
-  // Register service worker with simpler configuration
-  serviceWorkerRegistration.register({
-    onUpdate: registration => {
-      if (registration && registration.waiting) {
-        // When there's an update, prompt the user to refresh
-        if (window.confirm('New version available! Reload to update?')) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-          window.location.reload();
+// Service worker management
+try {
+  // Only register service worker in production
+  if (process.env.NODE_ENV === 'production') {
+    // Register service worker with simpler configuration
+    serviceWorkerRegistration.register({
+      onUpdate: registration => {
+        if (registration && registration.waiting) {
+          // When there's an update, prompt the user to refresh
+          if (window.confirm('New version available! Reload to update?')) {
+            try {
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              window.location.reload();
+            } catch (error) {
+              console.debug('Error while updating service worker:', error);
+              // Force reload anyway
+              window.location.reload();
+            }
+          }
         }
       }
+    });
+  } else {
+    // In development, aggressively unregister any existing service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+          registration.unregister().then(() => {
+            console.debug('Service worker unregistered in development mode');
+          });
+        }
+      });
     }
-  });
-} else {
-  // In development, make sure to unregister any existing service worker
-  serviceWorkerRegistration.unregister();
+    serviceWorkerRegistration.unregister();
+  }
+} catch (error) {
+  console.debug('Error during service worker management:', error);
 }

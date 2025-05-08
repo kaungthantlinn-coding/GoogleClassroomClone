@@ -37,9 +37,23 @@ self.addEventListener('activate', (event) => {
 
 // Message event handler (added during initial evaluation)
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+  try {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+      self.skipWaiting();
+    }
+  } catch (error) {
+    // Silently handle any errors that might occur during message processing
+    console.debug('Error in service worker message handler:', error);
   }
+});
+
+// Add a global error handler for the service worker
+self.addEventListener('error', (event) => {
+  // Prevent errors from being reported to the console
+  event.preventDefault();
+
+  // Log a debug message instead
+  console.debug('Service worker error suppressed:', event.message);
 });
 
 // Fetch event handler with improved caching strategy and error handling

@@ -1,4 +1,5 @@
-import { User } from './user';
+// Import only what's needed for announcement types
+import * as announcementApi from '../api/announcementApi';
 
 export interface Attachment {
   id: string;
@@ -20,6 +21,13 @@ export interface Comment {
   isPrivate?: boolean;
 }
 
+// Define the comment input format used in the UI
+export interface CommentInput {
+  userId: string;
+  userName: string;
+  text: string;
+}
+
 export interface Announcement {
   id: string;
   classId: string;
@@ -38,143 +46,160 @@ export interface AnnouncementFormData {
   attachments: File[];
 }
 
-// Local storage key for announcements
-const ANNOUNCEMENTS_STORAGE_KEY = 'classroom_announcements';
-
-// Get all announcements from localStorage
-export const getAllAnnouncements = (): Announcement[] => {
+// Get announcements for a specific class using API
+export const getAnnouncementsByClass = async (classId: string): Promise<Announcement[]> => {
+  if (!classId) {
+    console.error('Invalid classId provided to getAnnouncementsByClass');
+    return [];
+  }
+  
   try {
-    const storedAnnouncements = localStorage.getItem(ANNOUNCEMENTS_STORAGE_KEY);
-    console.log('Fetched from localStorage:', storedAnnouncements);
-    return storedAnnouncements ? JSON.parse(storedAnnouncements) : [];
+    return await announcementApi.getAnnouncements(classId);
   } catch (error) {
-    console.error('Error getting announcements from localStorage:', error);
+    console.error(`Error fetching announcements for class ${classId}:`, error);
     return [];
   }
 };
 
-// Get announcements for a specific class
-export const getAnnouncementsByClass = (classId: string): Announcement[] => {
+// Save a new announcement using API
+export const saveAnnouncement = async (announcement: Omit<Announcement, 'id' | 'createdAt'>): Promise<Announcement | null> => {
   try {
-    const announcements = getAllAnnouncements();
-    console.log('All announcements:', announcements);
-    console.log('Looking for classId:', classId);
-    
-    // Check if classId might be formatted differently (with or without hyphens)
-    const normalizedClassId = classId.replace(/-/g, '').toLowerCase();
-    
-    // Additional debugging to check if IDs match
-    announcements.forEach((announcement, index) => {
-      const normalizedAnnouncementClassId = announcement.classId.replace(/-/g, '').toLowerCase();
-      console.log(`Announcement ${index}:`, {
-        id: announcement.id,
-        classId: announcement.classId,
-        normalizedClassId: normalizedAnnouncementClassId,
-        matches: announcement.classId === classId,
-        normalizedMatches: normalizedAnnouncementClassId === normalizedClassId,
-        content: announcement.content.substring(0, 30) + (announcement.content.length > 30 ? '...' : '')
-      });
-    });
-    
-    // Try first with exact match
-    let filtered = announcements.filter(announcement => announcement.classId === classId);
-    
-    // If no matches, try with normalized IDs (remove hyphens and lowercase)
-    if (filtered.length === 0) {
-      filtered = announcements.filter(announcement => {
-        const normalizedAnnouncementClassId = announcement.classId.replace(/-/g, '').toLowerCase();
-        return normalizedAnnouncementClassId === normalizedClassId;
-      });
+    // Validate classId is present
+    if (!announcement.classId) {
+      console.error('Missing classId in announcement data:', announcement);
+      throw new Error('Cannot create announcement: Missing classId');
     }
     
-    // Sort by creation date
-    filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Log the ID format being used
+    const isGuid = typeof announcement.classId === 'string' && announcement.classId.includes('-');
+    console.log(`Using ${isGuid ? 'GUID' : 'numeric ID'} format for creating announcement: ${announcement.classId}`);
     
-    console.log('Filtered announcements:', filtered.length);
-    
-    // TEMP FIX: Return ALL announcements if filtered is empty
-    if (filtered.length === 0 && announcements.length > 0) {
-      console.warn('No matching announcements found. Showing all announcements as a fallback.');
-      return announcements.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }
-    
-    return filtered;
+    return await announcementApi.createAnnouncement(announcement);
   } catch (error) {
-    console.error('Error in getAnnouncementsByClass:', error);
-    return [];
+    console.error('Error creating announcement via API:', error);
+    return null;
   }
 };
 
-// Save a new announcement
-export const saveAnnouncement = (announcement: Announcement): void => {
-  try {
-    const announcements = getAllAnnouncements();
-    announcements.push(announcement);
-    localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(announcements));
-    console.log('Saved announcement:', announcement, 'All announcements now:', announcements);
-  } catch (error) {
-    console.error('Error saving announcement to localStorage:', error);
-  }
+// Helper function to safely check if an ID is generated
+export const isGeneratedId = (id: string | number | undefined): boolean => {
+  if (!id) return false;
+  const idStr = String(id);
+  return idStr.startsWith('generated-') || idStr.startsWith('local-') || idStr.startsWith('created-');
 };
 
-// Update an existing announcement
-export const updateAnnouncement = (updatedAnnouncement: Announcement): void => {
+// Update an existing announcement using API
+export const updateAnnouncement = async (announcementId: string | number | undefined, updatedData: Partial<Announcement>): Promise<Announcement | null> => {
   try {
-    const announcements = getAllAnnouncements();
-    const index = announcements.findIndex(a => a.id === updatedAnnouncement.id);
-    
-    if (index !== -1) {
-      announcements[index] = updatedAnnouncement;
-      localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(announcements));
+    // Validate announcement ID
+    if (!announcementId || announcementId === 'undefined') {
+      console.error('Invalid announcementId provided to updateAnnouncement:', announcementId);
+      throw new Error(`Cannot update announcement: Invalid ID: ${announcementId}`);
     }
-  } catch (error) {
-    console.error('Error updating announcement in localStorage:', error);
-  }
-};
-
-// Delete an announcement
-export const deleteAnnouncement = (announcementId: string): void => {
-  try {
-    const announcements = getAllAnnouncements();
-    const filteredAnnouncements = announcements.filter(a => a.id !== announcementId);
-    localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(filteredAnnouncements));
-  } catch (error) {
-    console.error('Error deleting announcement from localStorage:', error);
-  }
-};
-
-// Add a comment to an announcement
-export const addComment = (announcementId: string, comment: Comment): void => {
-  try {
-    const announcements = getAllAnnouncements();
-    const announcementIndex = announcements.findIndex(a => a.id === announcementId);
     
-    if (announcementIndex !== -1) {
-      if (!announcements[announcementIndex].comments) {
-        announcements[announcementIndex].comments = [];
-      }
-      
-      announcements[announcementIndex].comments.push(comment);
-      localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(announcements));
-    }
+    console.log(`Updating announcement with ID: ${announcementId}`);
+    return await announcementApi.updateAnnouncement(announcementId, updatedData);
   } catch (error) {
-    console.error('Error adding comment to announcement in localStorage:', error);
+    console.error(`Error updating announcement ${announcementId} via API:`, error);
+    return null;
   }
 };
 
-// Remove a comment from an announcement
-export const removeComment = (announcementId: string, commentId: string): void => {
+// Delete an announcement using API
+export const deleteAnnouncement = async (announcementId: string | number | undefined): Promise<boolean> => {
   try {
-    const announcements = getAllAnnouncements();
-    const announcementIndex = announcements.findIndex(a => a.id === announcementId);
-    
-    if (announcementIndex !== -1 && announcements[announcementIndex].comments) {
-      announcements[announcementIndex].comments = announcements[announcementIndex].comments.filter(
-        c => c.id !== commentId
-      );
-      localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(announcements));
+    // Validate announcement ID
+    if (!announcementId || announcementId === 'undefined') {
+      console.error('Invalid announcementId provided to deleteAnnouncement:', announcementId);
+      throw new Error(`Cannot delete announcement: Invalid ID: ${announcementId}`);
     }
+    
+    console.log(`Deleting announcement with ID: ${announcementId}`);
+    await announcementApi.deleteAnnouncement(announcementId);
+    return true;
   } catch (error) {
-    console.error('Error removing comment from announcement in localStorage:', error);
+    console.error(`Error deleting announcement ${announcementId} via API:`, error);
+    return false;
+  }
+};
+
+// Add a comment to an announcement using API
+export const addComment = async (announcementId: string | number | undefined, comment: CommentInput): Promise<Announcement | null> => {
+  try {
+    // Validate announcement ID
+    if (!announcementId || announcementId === 'undefined') {
+      console.error('Invalid announcementId provided to addComment:', announcementId);
+      throw new Error(`Cannot add comment: Invalid announcement ID: ${announcementId}`);
+    }
+    
+    // Ensure comment data has all required fields with fallbacks
+    const validatedComment: CommentInput = {
+      userId: comment.userId || '1004',
+      userName: comment.userName || 'User',
+      text: comment.text.trim()
+    };
+    
+    console.log(`Adding comment to announcement with ID: ${announcementId}`, validatedComment);
+    return await announcementApi.addComment(announcementId, validatedComment);
+  } catch (error) {
+    console.error(`Error adding comment to announcement ${announcementId} via API:`, error);
+    return null;
+  }
+};
+
+// Add a new function to edit a comment
+export const editComment = async (commentId: string, content: string | { content: string }): Promise<Announcement | null> => {
+  try {
+    // Validate comment ID
+    if (!commentId || commentId === 'undefined') {
+      console.error('Invalid commentId provided to editComment:', commentId);
+      throw new Error(`Cannot edit comment: Invalid comment ID: ${commentId}`);
+    }
+    
+    const contentValue = typeof content === 'string' ? content : content.content;
+    console.log(`Types/announcement: Editing comment with ID: ${commentId}, content: ${contentValue}`);
+    
+    // Direct API call to the correct endpoint: PUT /api/comments/{commentId}
+    return await announcementApi.editComment(commentId, content);
+  } catch (error) {
+    console.error(`Error editing comment ${commentId} via API:`, error);
+    throw error; // Re-throw to let component handle the error
+  }
+};
+
+// Remove a comment from an announcement using API
+export const removeComment = async (commentId: string | undefined): Promise<Announcement | null> => {
+  try {
+    // Validate comment ID
+    if (!commentId || commentId === 'undefined') {
+      console.error('Invalid commentId provided to removeComment:', commentId);
+      throw new Error(`Cannot remove comment: Invalid comment ID: ${commentId}`);
+    }
+    
+    console.log(`Types/announcement: Removing comment with ID: ${commentId}`);
+    
+    // Direct API call to the correct endpoint: DELETE /api/comments/{commentId}
+    // The empty string is for the announcement ID which is not needed with the new API
+    return await announcementApi.deleteComment('', commentId);
+  } catch (error) {
+    console.error(`Error removing comment ${commentId} via API:`, error);
+    throw error; // Re-throw to let component handle the error
+  }
+};
+
+// Fetch comments for an announcement
+export const getCommentsForAnnouncement = async (announcementId: string | number | undefined): Promise<Comment[]> => {
+  try {
+    // Validate announcement ID
+    if (!announcementId || announcementId === 'undefined') {
+      console.error('Invalid announcementId provided to getCommentsForAnnouncement:', announcementId);
+      return [];
+    }
+    
+    console.log(`Fetching comments for announcement with ID: ${announcementId}`);
+    return await announcementApi.getComments(announcementId);
+  } catch (error) {
+    console.error(`Error fetching comments for announcement ${announcementId} via API:`, error);
+    throw error; // Propagate error to allow UI to handle it
   }
 }; 

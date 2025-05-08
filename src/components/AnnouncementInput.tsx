@@ -77,10 +77,61 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
 
   // Set current class as selected on initial load
   useEffect(() => {
-    if (classId && courses) {
-      const currentClass = courses.find(c => c.id === classId);
+    if (!classId) {
+      console.log("No classId in URL params");
+      return;
+    }
+    
+    console.log("Current classId from URL params:", classId, typeof classId);
+    
+    // Always set the current classId in selectedClasses for immediate use
+    setSelectedClasses([classId]);
+    
+    // Also check if courses are loaded
+    if (courses && courses.length > 0) {
+      console.log("Available courses:", JSON.stringify(courses.map(c => ({
+        id: c.id,
+        courseId: c.courseId,
+        courseGuid: c.courseGuid,
+        name: c.name
+      }))));
+      
+      // Determine if the current ID is a GUID
+      const isGuid = typeof classId === 'string' && classId.includes('-');
+      console.log(`Class ID from URL is a ${isGuid ? 'GUID' : 'numeric ID'}: ${classId}`);
+      
+      // Try to find by exact match
+      let currentClass = courses.find(c => c.id === classId);
+      console.log("Found by exact ID match:", currentClass ? JSON.stringify(currentClass) : "undefined");
+      
+      // Try to find by numeric ID
+      if (!currentClass) {
+        currentClass = courses.find(c => c.courseId?.toString() === classId);
+        console.log("Found by numeric ID:", currentClass ? JSON.stringify(currentClass) : "undefined");
+      }
+      
+      // Try to find by GUID
+      if (!currentClass) {
+        currentClass = courses.find(c => c.courseGuid === classId);
+        console.log("Found by GUID:", currentClass ? JSON.stringify(currentClass) : "undefined");
+      }
+      
+      // If found by any method, use the appropriate ID based on the API endpoint requirements
       if (currentClass) {
-        setSelectedClasses([classId]);
+        let idToUse;
+        
+        if (isGuid) {
+          // If URL has GUID, prefer to use the GUID for consistency
+          idToUse = currentClass.courseGuid || classId;
+          console.log("Using GUID for consistency:", idToUse);
+        } else {
+          // Otherwise use the numeric ID or fallback to the course's id field
+          idToUse = currentClass.courseId?.toString() || currentClass.id;
+          console.log("Using numeric ID for consistency:", idToUse);
+        }
+        
+        console.log("Setting selected class to:", idToUse);
+        setSelectedClasses([idToUse]);
       }
     }
   }, [classId, courses]);
@@ -112,34 +163,31 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   
   // Load recent announcements
   useEffect(() => {
-    const loadRecentAnnouncements = () => {
+    const loadRecentAnnouncements = async () => {
       try {
-        const stored = localStorage.getItem('classroom_announcements');
-        if (stored) {
-          const allAnnouncements: Announcement[] = JSON.parse(stored);
+        if (!classId) return;
+        
+        // Use API to get announcements for current class
+        const announcements = await import('../api/announcementApi')
+          .then(api => api.getAnnouncements(classId));
+          
+        if (announcements && announcements.length > 0) {
           // Sort by date (newest first) and take the 10 most recent
-          const sorted = allAnnouncements
+          const sorted = announcements
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 10);
+            
           setRecentAnnouncements(sorted);
         }
       } catch (e) {
         console.error("Error loading recent announcements:", e);
+        setRecentAnnouncements([]);
       }
     };
     
     loadRecentAnnouncements();
     
-    // Also set up event listener for storage changes
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'classroom_announcements') {
-        loadRecentAnnouncements();
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [classId]);
   
   // Handle click outside to close announcement dropdown
   useEffect(() => {
@@ -157,56 +205,96 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
 
   const handlePost = () => {
     if (!content.trim() && attachments.length === 0) return;
-    if (selectedClasses.length === 0) return;
+    
+    // Validate that we have a valid classId to use
+    let currentClassId = classId;
+    
+    // If we have any selected classes, prioritize the first selected class
+    if (selectedClasses.length > 0) {
+      currentClassId = selectedClasses[0];
+      console.log("Using selected class ID:", currentClassId);
+    } else if (classId) {
+      console.log("Using URL param class ID:", classId);
+    } else {
+      console.error("No valid class ID available for posting announcement");
+      alert("Cannot post announcement: No class selected");
+      setIsPosting(false);
+      return;
+    }
+    
+    // Ensure we have a valid value
+    if (!currentClassId) {
+      console.error("Failed to determine a valid class ID for announcement");
+      alert("Cannot post announcement: Invalid class selection");
+      setIsPosting(false);
+      return;
+    }
     
     setIsPosting(true);
     
-    // Get existing announcements
-    let existingAnnouncements = [];
-    try {
-      const stored = localStorage.getItem('classroom_announcements');
-      if (stored) {
-        existingAnnouncements = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Error reading existing announcements:", e);
-    }
+    // Determine if the ID is a GUID
+    const isGuid = typeof currentClassId === 'string' && currentClassId.includes('-');
+    console.log(`ID format: ${isGuid ? 'GUID' : 'Numeric'}`);
     
-    // Add announcements for each selected class
-    for (const selectedClassId of selectedClasses) {
-      const announcement = {
-        id: `announcement-${Date.now()}-${selectedClassId}`,
-        classId: selectedClassId,
-        content: content.trim(),
-        authorId: user.id,
-        authorName: user.name,
-        authorAvatar: user.avatar,
-        createdAt: new Date().toISOString(),
-        attachments: attachments.length > 0 ? attachments : [],
-        comments: []
-      };
+    // Process each selected class (for now, just the current one)
+    try {
+      console.log("Posting announcement to class ID:", currentClassId);
       
-      existingAnnouncements.push(announcement);
-    }
-    
-    // Save all announcements
-    try {
-      localStorage.setItem('classroom_announcements', JSON.stringify(existingAnnouncements));
-    } catch (e) {
-      console.error('Error saving announcements to localStorage:', e);
-    }
-    
-    // Reset form
-    setContent('');
-    setAttachments([]);
-    setIsExpanded(false);
-    setIsPosting(false);
-    
-    // Call callback if provided
-    if (onAnnouncementPosted) {
-      setTimeout(() => {
-        onAnnouncementPosted();
-      }, 100);
+      // Import courseApi to get the actual course if needed
+      import('../api/courseApi')
+        .then(async (courseApi) => {
+          let targetCourseId = currentClassId;
+          
+          // If using a GUID, ensure we have the right endpoint format
+          if (isGuid) {
+            console.log("Using GUID format for API call");
+            // No need to transform the ID, the announcementApi will handle it
+          } else {
+            console.log("Using numeric ID format for API call");
+            // For numeric IDs, we can use them directly as well
+          }
+          
+          // Prepare announcement data with guaranteed classId
+          const announcementData = {
+            classId: targetCourseId,
+            content: content.trim(),
+            authorId: user.id || "1004", // Ensure we have a valid user ID
+            authorName: user.name || "User",
+            authorAvatar: user.avatar,
+            attachments: attachments.length > 0 ? attachments : []
+          };
+          
+          console.log("Announcement data before API call:", JSON.stringify(announcementData));
+          
+          // Call the API to create the announcement
+          return import('../api/announcementApi')
+            .then(api => api.createAnnouncement(announcementData));
+        })
+        .then(createdAnnouncement => {
+          console.log('Successfully created announcement:', createdAnnouncement);
+          
+          // Reset form
+          setContent('');
+          setAttachments([]);
+          setIsExpanded(false);
+          setIsPosting(false);
+          
+          // Notify parent component that announcements were posted
+          if (onAnnouncementPosted) {
+            setTimeout(() => {
+              onAnnouncementPosted();
+            }, 100);
+          }
+        })
+        .catch(error => {
+          console.error(`Failed to create announcement for class ${currentClassId}:`, error);
+          setIsPosting(false);
+          alert("Could not post announcement. Please try again.");
+        });
+    } catch (error) {
+      console.error('Error in create announcement flow:', error);
+      setIsPosting(false);
+      alert("An unexpected error occurred. Please try again.");
     }
   };
 
@@ -682,9 +770,9 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
               </button>
               <button 
                 onClick={handlePost}
-                disabled={(!content.trim() && attachments.length === 0) || isPosting || selectedClasses.length === 0}
+                disabled={(!content.trim() && attachments.length === 0) || isPosting || (!classId && selectedClasses.length === 0)}
                 className={`px-6 py-2 rounded text-sm font-medium transition-colors ${
-                  (!content.trim() && attachments.length === 0) || isPosting || selectedClasses.length === 0
+                  (!content.trim() && attachments.length === 0) || isPosting || (!classId && selectedClasses.length === 0)
                     ? 'bg-[#e2e2e2] text-[#666]'
                     : 'bg-[#1a73e8] text-white hover:bg-[#1557b0]'
                 }`}
