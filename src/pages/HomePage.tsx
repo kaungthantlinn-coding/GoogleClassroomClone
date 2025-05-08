@@ -1,13 +1,11 @@
+import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Course } from '../types/course';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Users, Folder, Trash2, Edit } from 'lucide-react';
-import { useAuthStore } from '../stores/useAuthStore';
-import { useState, useEffect } from 'react';
-import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
-import { getCourses, createCourse, updateCourse, deleteCourse } from '../api/courseApi';
+import { deleteCourse, getCourses, updateCourse } from '../api/courseApi';
 import axios from 'axios';
-import classroomImage from '../assets/classroom.png';
+import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
 
 // Fallback images when Unsplash API fails - using publicly accessible CDNs for reliability
 const FALLBACK_IMAGES = {
@@ -94,16 +92,12 @@ const preloadImage = (src: string, fallbackSrc: string): Promise<string> => {
 
 export default function HomePage() {
   const queryClient = useQueryClient();
-  const location = useLocation();
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiveStep, setArchiveStep] = useState(0);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseImages, setCourseImages] = useState<{[key: string]: string}>({});
-
-  // Store the imported image as a data URL for reliable reference
-  const [defaultClassroomImage, setDefaultClassroomImage] = useState<string>(FALLBACK_IMAGES.default);
   
   // Convert imported classroom image to data URL on component mount
   useEffect(() => {
@@ -148,6 +142,12 @@ export default function HomePage() {
       
       // Refresh the courses list
       queryClient.invalidateQueries({ queryKey: ['courses'] });
+      
+      // Dispatch event to update sidebar
+      const clearEvent = new CustomEvent('class-removed', {
+        detail: { action: 'clearAll' }
+      });
+      window.dispatchEvent(clearEvent);
     }
   };
 
@@ -169,6 +169,12 @@ export default function HomePage() {
         // Refresh the courses list
         queryClient.invalidateQueries({ queryKey: ['courses'] });
 
+        // Dispatch event to update sidebar
+        const archiveEvent = new CustomEvent('class-removed', {
+          detail: { action: 'removeClass', classId: selectedCourse.id }
+        });
+        window.dispatchEvent(archiveEvent);
+
         // Close the modal
         setShowArchiveModal(false);
         setSelectedCourse(null);
@@ -178,11 +184,15 @@ export default function HomePage() {
       });
   };
 
-  // Function to handle edit click
-  const handleEditClick = (course: Course) => {
-    console.log("Edit button clicked", course);
+  // Function to open edit form modal with the selected course
+  const openEditForm = (course: Course) => {
+    console.log("Opening edit form for course:", course);
     // Create a deep copy of the course to avoid reference issues
     const courseCopy = JSON.parse(JSON.stringify(course));
+    // Ensure id is set
+    if (!courseCopy.id && courseCopy.courseId) {
+      courseCopy.id = courseCopy.courseId.toString();
+    }
     setEditingCourse(courseCopy);
     setShowEditForm(true);
   };
@@ -191,6 +201,18 @@ export default function HomePage() {
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCourse) return;
+
+    // Ensure id is set before saving
+    if (!editingCourse.id && editingCourse.courseId) {
+      editingCourse.id = editingCourse.courseId.toString();
+    }
+    if (!editingCourse.id && editingCourse.courseGuid) {
+      editingCourse.id = editingCourse.courseGuid;
+    }
+    if (!editingCourse.id) {
+      alert('Course ID is missing. Cannot save changes.');
+      return;
+    }
 
     console.log("Saving edited course", editingCourse);
 
@@ -255,11 +277,65 @@ export default function HomePage() {
     },
   });
 
+  // Handle theme update events
+  useEffect(() => {
+    const handleThemeUpdated = (event: any) => {
+      const { courseId, theme } = event.detail;
+      console.log('HomePage received theme update event:', { courseId, theme });
+      
+      // Invalidate course queries to ensure we get fresh data
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    };
+    
+    // Add theme update event listener
+    window.addEventListener('themeUpdated', handleThemeUpdated);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('themeUpdated', handleThemeUpdated);
+    };
+  }, [queryClient]);
+  
+  // Apply theme data from localStorage cache to courses
+  const applyThemeCache = (coursesList: Course[]): Course[] => {
+    try {
+      // Get theme cache from localStorage
+      const themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
+      
+      // Apply cached themes to courses if available
+      return coursesList.map(course => {
+        const courseId = course.courseId?.toString() || course.id || course.courseGuid;
+        if (courseId && themeCache[courseId]) {
+          console.log(`Applying cached theme to course ${courseId}:`, themeCache[courseId]);
+          return {
+            ...course,
+            color: themeCache[courseId].color,
+            coverImage: themeCache[courseId].coverImage
+          };
+        }
+        return course;
+      });
+    } catch (error) {
+      console.error('Error applying theme cache:', error);
+      return coursesList;
+    }
+  };
+  
   // Fetch course images for all courses that need them - MOVED AFTER courses is defined
   useEffect(() => {
     if (courses) {
-      courses.forEach(course => {
-        const cardId = (course.courseId ? course.courseId.toString() : course.id) || generateUniqueKey('card', course);
+      // Apply theme cache to courses
+      const themedCourses = applyThemeCache(courses);
+      
+      console.log("HomePage processed courses with themes:", 
+        JSON.stringify(themedCourses.map(c => ({
+          id: c.id,
+          name: c.name,
+          color: c.color
+        })), null, 2));
+      
+      themedCourses.forEach(course => {
+        const cardId = course.courseId?.toString() || course.id || course.courseGuid || generateUniqueKey('card', course);
         if (course.name && !isValidImageUrl(courseImages[cardId])) {
           fetchCourseImage(cardId, course.name);
         }
@@ -294,15 +370,23 @@ export default function HomePage() {
   }
 
   // Fix the profile avatar display
-  const getAvatarColor = (courseId: string, name: string) => {
+  const getAvatarColor = (courseId: string, name: string, color?: string) => {
+    // First use the explicitly provided color if available
+    if (color && color !== 'undefined') {
+      console.log(`Using provided color for ${name}: ${color}`);
+      return color;
+    }
+
     // Consistent colors for specific courses
     if (courseId === 'fullstack-2') return '#4285f4';
     if (courseId === 'riso-2') return '#5a67f2';
 
     // For custom courses, generate a color based on name
-    const colors = ['#4285f4', '#0f9d58', '#f4b400', '#db4437', '#673ab7', '#ff6d00', '#795548'];
+    const colors = ['#4285f4', '#1e8e3e', '#d93025', '#f4b400', '#673ab7', '#ff6d00', '#795548'];
     const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
+    const generatedColor = colors[hash % colors.length];
+    console.log(`Generated color for ${name}: ${generatedColor}`);
+    return generatedColor;
   };
 
   const getInitial = (name?: string) => {
@@ -310,53 +394,74 @@ export default function HomePage() {
   };
 
   const renderClassCard = (classData: Course) => {
-    // Use saved theme data if available
-    const cardColor = classData.color || '#1a73e8';
-    const cardId = (classData.courseId ? classData.courseId.toString() : classData.id) || generateUniqueKey('card', classData);
+    // Generate a consistent ID for this course
+    const cardId = classData.courseId?.toString() || classData.id || classData.courseGuid || generateUniqueKey('card', classData);
     
-    // Try to use cached image first, then coverImage from course data, then default
-    let cardImage = courseImages[cardId] || classData.coverImage;
+    // Check localStorage theme cache directly to ensure we have the latest
+    let cardColor = classData.color;
+    let cardImage = classData.coverImage;
     
-    // If cardImage is invalid, use default FALLBACK_IMAGES
+    try {
+      const themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
+      if (cardId && themeCache[cardId]) {
+        // If we have a cached theme, use it (overrides API data)
+        console.log(`Card using cached theme for ${cardId}:`, themeCache[cardId]);
+        cardColor = themeCache[cardId].color || cardColor;
+        cardImage = themeCache[cardId].coverImage || cardImage;
+      }
+    } catch (error) {
+      console.error('Error reading theme cache in card render:', error);
+    }
+    
+    // Final fallbacks
+    cardColor = cardColor || getAvatarColor(classData.id, classData.name);
+    cardImage = cardImage || courseImages[cardId];
+    
+    // Fallback for invalid image URLs
     if (!isValidImageUrl(cardImage)) {
       const theme = classData.name 
         ? getRandomUnsplashImage(classData.name)
         : { fallback: FALLBACK_IMAGES.default };
       cardImage = theme.fallback;
     }
-    
     return (
-      <div key={`card-content-${cardId}`} className="w-full h-full">
-        <div
-          className="h-32 bg-cover bg-center relative"
-          style={{
-            backgroundColor: cardColor
-          }}
-        >
-          <div className="absolute inset-0 z-0">
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/90 z-10"></div>
-            <img 
-              src={cardImage}
-              alt={`${classData.name} banner`}
-              className="w-full h-full object-cover object-center"
-              onError={(e) => {
-                const img = e.target as HTMLImageElement;
-                // Get appropriate fallback for this class type
-                const imageOptions = getRandomUnsplashImage(classData.name);
-                img.src = imageOptions.fallback;
-                // Update course images state with fallback
-                setCourseImages(prev => ({...prev, [cardId]: imageOptions.fallback}));
-              }}
-            />
+      <div key={`card-content-${cardId}`} className="w-full h-full flex flex-col">
+        {/* Banner image */}
+        <div className="h-32 w-full bg-cover bg-center relative flex-shrink-0" style={{backgroundColor: cardColor}}>
+          <img 
+            src={cardImage}
+            alt={`${classData.name} banner`}
+            className="w-full h-full object-cover object-center rounded-t-lg"
+            onError={(e) => {
+              const img = e.target as HTMLImageElement;
+              const imageOptions = getRandomUnsplashImage(classData.name);
+              img.src = imageOptions.fallback;
+              setCourseImages(prev => ({...prev, [cardId]: imageOptions.fallback}));
+            }}
+          />
+          {/* Avatar */}
+          <div 
+            className="absolute left-6 -bottom-6 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold border-4 border-white shadow-lg bg-opacity-90"
+            style={{backgroundColor: cardColor}}
+          >
+            {getInitial(classData.name)}
           </div>
-          <div className="relative z-10 p-6 h-full flex flex-col justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-white mb-1">{classData.name}</h3>
-              <p className="text-white text-opacity-90">{classData.section}</p>
+        </div>
+        {/* Card content */}
+        <div className="flex-1 flex flex-col justify-between bg-white rounded-b-lg pt-8 pb-4 px-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 truncate">{classData.name}</h3>
+            <p className="text-sm text-gray-500 mb-2 truncate">{classData.section || 'No section'}</p>
+          </div>
+          <div className="flex flex-col gap-1 mt-2">
+            <div className="flex items-center gap-2">
+              <Users size={18} strokeWidth={1.5} className="text-gray-400" />
+              <span className="text-sm text-gray-700">{classData.teacherName || 'Teacher'}</span>
             </div>
-            {classData.teacherName && (
-              <p className="text-white text-opacity-80">{classData.teacherName}</p>
-            )}
+            <div className="flex items-center gap-2">
+              <Folder size={18} strokeWidth={1.5} className="text-gray-400" />
+              <span className="text-sm text-gray-700">{classData.subject || 'No subject'}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -484,7 +589,7 @@ export default function HomePage() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" key="courses-grid">
-          {courses?.map((course, index) => {
+          {courses?.map((course) => {
             // Generate a truly unique key for this course
             const courseKey = generateUniqueKey('course', course);
             return (
@@ -495,15 +600,26 @@ export default function HomePage() {
               >
                 <div className="relative" key={`content-${courseKey}`}>
                   <Link
-                    to={`/class/${course.courseId}`}
+                    to={`/class/${course.courseId || course.id || course.courseGuid}`}
                     state={{
                       className: course.name,
                       section: course.section,
                       classCode: course.enrollmentCode,
                       color: course.color || '#1a73e8',
-                      coverImage: isValidImageUrl(courseImages[course.courseId]) 
-                        ? courseImages[course.courseId] 
-                        : (isValidImageUrl(course.coverImage) ? course.coverImage : FALLBACK_IMAGES.default)
+                      coverImage: (() => {
+                        // Generate a safe card ID that won't be undefined
+                        const cardId = course.courseId?.toString() || course.id || course.courseGuid || '';
+                        // Check if we have a cached image
+                        if (cardId && courseImages[cardId] && isValidImageUrl(courseImages[cardId])) {
+                          return courseImages[cardId];
+                        }
+                        // Use course cover image if valid
+                        if (isValidImageUrl(course.coverImage)) {
+                          return course.coverImage;
+                        }
+                        // Fallback to default
+                        return FALLBACK_IMAGES.default;
+                      })()
                     }}
                     className="block rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300"
                   >
@@ -516,9 +632,7 @@ export default function HomePage() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log("Quick edit button clicked", course);
-                        setEditingCourse({...course});
-                        setShowEditForm(true);
+                        openEditForm(course);
                       }}
                       className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
                       title="Edit class"
@@ -538,36 +652,6 @@ export default function HomePage() {
                       <Trash2 size={18} />
                     </button>
                   </div>
-                  
-                  {/* Profile avatar */}
-                  <div 
-                    key={`avatar-${courseKey}`}
-                    className="absolute right-6 bottom-0 translate-y-1/2 w-[46px] h-[46px] rounded-full flex items-center justify-center text-white text-lg font-medium border-2 border-white"
-                    style={{
-                      backgroundColor: getAvatarColor(course.courseId?.toString() || course.id, course.name || ''),
-                      boxShadow: '0 1px 5px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    <span>{course.id === 'riso-2' ? 'S' : getInitial(course.name)}</span>
-                  </div>
-                </div>
-                
-                {/* Bottom part of card with icons */}
-                <div className="bg-white p-3 flex justify-end items-center gap-4 h-[60px]" key={`footer-${courseKey}`}>
-                  <Link 
-                    key={`people-${courseKey}`}
-                    to={`/class/${course.courseId}/people`}
-                    className="text-[#5f6368] hover:text-[#3c4043] p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-                  >
-                    <Users size={20} strokeWidth={1.5} />
-                  </Link>
-                  <Link 
-                    key={`materials-${courseKey}`}
-                    to={`/class/${course.courseId}/materials`}
-                    className="text-[#5f6368] hover:text-[#3c4043] p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-                  >
-                    <Folder size={20} strokeWidth={1.5} />
-                  </Link>
                 </div>
               </div>
             );

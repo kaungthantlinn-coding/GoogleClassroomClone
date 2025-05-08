@@ -205,6 +205,85 @@ export const saveSubmission = async (assignmentId: string | number, submission: 
   }
 };
 
+// Course operations
+export const updateCourse = async (courseId: string | number, courseData: any): Promise<any> => {
+  try {
+    // Using real-world API: PUT /api/courses/{courseId}
+    // Using PUT as specified in the API documentation
+    const response = await storageApi.put(`/courses/${courseId}`, courseData);
+    console.log('Course update response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to update course ${courseId}:`, error);
+    throw error;
+  }
+};
+
+export const updateCourseTheme = async (courseId: string | number, themeData: any): Promise<any> => {
+  try {
+    // Convert courseId to string for consistency
+    const courseIdStr = courseId.toString();
+    
+    // Ensure the color value is properly formatted (hashtag format expected by API)
+    let colorValue = themeData.color;
+    if (colorValue && !colorValue.startsWith('#')) {
+      colorValue = `#${colorValue}`;
+    }
+    
+    // Create the theme update data with the EXACT field names expected by the API
+    // Based on the provided API implementation
+    const themeUpdateData = {
+      courseId: courseIdStr,       // The course ID
+      themeColor: colorValue,      // NOTE: Using 'themeColor' as expected by the API
+      headerImage: themeData.coverImage  // NOTE: Using 'headerImage' as expected by the API
+    };
+    
+    console.log('Updating course theme with correct field names:', themeUpdateData);
+    
+    // Use the dedicated theme update endpoint with PUT as specified in API docs
+    // PUT: api/courses/theme
+    const response = await storageApi.put('/courses/theme', themeUpdateData);
+    console.log('Course theme update response:', response.data);
+    
+    // After a successful theme update, save the theme data to localStorage as a fallback
+    // This ensures it can be retrieved even if the API cache isn't updated properly
+    try {
+      // Create a theme cache to store themes by courseId
+      let themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
+      
+      // Update the cache with the new theme
+      themeCache[courseIdStr] = {
+        color: colorValue,
+        coverImage: themeData.coverImage,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Save the updated cache back to localStorage
+      localStorage.setItem('themeCache', JSON.stringify(themeCache));
+      console.log(`Saved theme for course ${courseIdStr} to local cache`);
+      
+      // Dispatch a global event that can be listened to by any component
+      window.dispatchEvent(new CustomEvent('themeUpdated', { 
+        detail: { 
+          courseId: courseIdStr, 
+          theme: {
+            color: colorValue,
+            coverImage: themeData.coverImage
+          } 
+        } 
+      }));
+    } catch (cacheError) {
+      console.error('Failed to update theme cache:', cacheError);
+      // Continue anyway since the theme update itself succeeded
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to update course theme for ${courseId}:`, error);
+    throw error;
+  }
+};
+
 // User preferences/settings
 export const getUserPreferences = async (): Promise<any> => {
   try {

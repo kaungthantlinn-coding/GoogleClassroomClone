@@ -171,20 +171,38 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
   const [activeCategory, setActiveCategory] = useState('general');
   const [showThemeSelector, setShowThemeSelector] = useState(false);
 
-  // Add timestamp to force image refresh
-  const getRandomImageUrl = (url: string) => {
-    return `${url}&t=${Date.now()}`;
+  // Add timestamp to ensure we get fresh image when selected
+  const processImageUrl = (url: string) => {
+    if (!url) return '';
+    
+    // If URL already has query parameters, add timestamp
+    if (url.includes('?')) {
+      return `${url}&t=${Date.now()}`;
+    }
+    
+    // Otherwise add timestamp as first query parameter
+    return `${url}?t=${Date.now()}`;
   };
 
   const handleSave = () => {
-    onSave({ color: selectedColor, image: selectedImage });
+    // Make sure we're sending valid data to the real-world API
+    const themeData = { 
+      color: selectedColor || '#1a73e8', 
+      image: selectedImage || defaultThemeImages.general[0].url 
+    };
+    
+    console.log('Saving theme with color:', selectedColor);
+    console.log('Full theme data:', themeData);
+    onSave(themeData);
     onClose();
   };
 
   const handleThemeSelect = (image: string, color: string) => {
-    setSelectedImage(getRandomImageUrl(image));
+    setSelectedImage(processImageUrl(image));
     setSelectedColor(color);
     setShowThemeSelector(false);
+    console.log('Selected theme image:', image);
+    console.log('Selected theme color:', color);
   };
 
   if (showThemeSelector) {
@@ -250,7 +268,7 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
                 Cancel
               </button>
               <button
-                className="px-6 py-2 text-white bg-[#1a73e8] hover:bg-[#1557b0] rounded"
+                className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6f9fe] rounded"
                 onClick={() => setShowThemeSelector(false)}
               >
                 Select class theme
@@ -292,8 +310,11 @@ export default function ThemeCustomizer({ isOpen, onClose, onSave, currentTheme 
                 <Image size={18} />
                 Select photo
               </button>
+              {/* Disabled upload feature since we're using API-provided images */}
               <button
-                className="flex items-center gap-2 px-4 py-2 text-[#1a73e8] bg-[#f6f9fe] rounded hover:bg-[#e8f0fe]"
+                className="flex items-center gap-2 px-4 py-2 text-[#1a73e8] bg-[#f6f9fe] rounded hover:bg-[#e8f0fe] opacity-50 cursor-not-allowed"
+                disabled
+                title="This feature is not available with the real-world API"
               >
                 <Upload size={18} />
                 Upload photo

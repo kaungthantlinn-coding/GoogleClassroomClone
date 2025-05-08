@@ -63,8 +63,10 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
       }
       
       // Random theme colors
-      const colors = ['#1a73e8', '#1e8e3e', '#d93025', '#4285f4', '#f8836b', '#ff8a65', '#3c4043'];
+      const colors = ['#1a73e8', '#1e8e3e', '#d93025', '#4285f4', '#f8836b', '#ff6d00', '#795548'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+      console.log("Selected random color for new class:", randomColor);
 
       // Random education-related keywords for Unsplash
       const keywords = [
@@ -99,13 +101,33 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
         coverImage: randomImage
       };
       
+      console.log("Creating course with data:", JSON.stringify(courseData, null, 2));
+      
       try {
         // Call the API to create a new course
         const createdCourse = await createCourse(courseData);
         console.log('Created new course:', createdCourse);
         
+        // Ensure we have a color to use (prefer API response, fallback to our random color)
+        const finalColor = createdCourse.color || randomColor;
+        console.log('Final color being used:', finalColor);
+        
         // Invalidate courses query to refresh data
         queryClient.invalidateQueries({ queryKey: ['courses'] });
+        
+        // Dispatch class-created event to update sidebar
+        const classCreatedEvent = new CustomEvent('class-created', {
+          detail: {
+            action: 'addClass',
+            class: {
+              id: createdCourse.id || createdCourse.courseId?.toString() || createdCourse.courseGuid,
+              name: createdCourse.name,
+              section: createdCourse.section || '',
+              color: finalColor
+            }
+          }
+        });
+        window.dispatchEvent(classCreatedEvent);
         
         // Navigate to the new class page using the appropriate ID (courseGuid, courseId, or id)
         const courseId = createdCourse.courseGuid || createdCourse.courseId?.toString() || createdCourse.id;
@@ -114,7 +136,7 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
             className: createdCourse.name, 
             section: createdCourse.section,
             coverImage: randomImage,
-            color: randomColor
+            color: finalColor
           }
         });
       } catch (error) {
@@ -134,6 +156,12 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
         
         // Invalidate courses query to refresh data
         queryClient.invalidateQueries({ queryKey: ['courses'] });
+        
+        // Dispatch event to update sidebar with joined class
+        const joinedClassEvent = new CustomEvent('class-created', {
+          detail: { action: 'addClass' }
+        });
+        window.dispatchEvent(joinedClassEvent);
         
         // Navigate to home page to see the joined class
         navigate('/');

@@ -167,15 +167,9 @@ const getCachedCourse = async (id: string): Promise<Course> => {
   }
   
   try {
-    // Check if the id is a GUID (contains hyphens)
-    const isGuid = normalizedId.includes('-');
-    
-    let response;
-    if (isGuid) {
-      response = await courseApi.get<Course>(`/guid/${id}`);
-    } else {
-      response = await courseApi.get<Course>(`/${id}`);
-    }
+    // Always use the numeric ID endpoint
+    // No longer using GUID endpoints as requested
+    const response = await courseApi.get<Course>(`/${id}`);
     
     // Map API response to expected frontend format if needed
     const courseData = response.data;
@@ -187,12 +181,9 @@ const getCachedCourse = async (id: string): Promise<Course> => {
     const now = Date.now();
     courseCache[normalizedId] = { data: courseData, timestamp: now };
     
-    // Also cache by numeric ID and GUID if available
+    // Also cache by numeric ID if available
     if (courseData.courseId) {
       courseCache[courseData.courseId.toString()] = { data: courseData, timestamp: now };
-    }
-    if (courseData.courseGuid) {
-      courseCache[courseData.courseGuid.toLowerCase()] = { data: courseData, timestamp: now };
     }
     
     return courseData;
@@ -224,28 +215,8 @@ export const getCourseById = async (id: string): Promise<Course> => {
   }
 };
 
-export const getCourseByGuid = async (guid: string): Promise<Course> => {
-  if (!guid || guid === 'undefined') {
-    console.error('Invalid course GUID provided:', guid);
-    return Promise.reject(new Error(`Invalid course GUID: ${guid}`));
-  }
-  
-  try {
-    const response = await courseApi.get<Course>(`/guid/${guid}`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error, `Failed to fetch course with GUID ${guid}`);
-  }
-};
-
-export const getCourseDetailByGuid = async (guid: string): Promise<Course> => {
-  try {
-    const response = await courseApi.get<Course>(`/guid/${guid}/detail`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error, `Failed to fetch detailed course with GUID ${guid}`);
-  }
-};
+// GUID-specific functions have been removed as requested
+// Only using course IDs for all operations
 
 export const getCourseDetail = async (id: string): Promise<Course> => {
   try {
@@ -280,23 +251,22 @@ export const createCourse = async (courseData: CreateCourseRequest): Promise<Cou
   }
 };
 
-export const updateCourse = async (id: string, courseData: UpdateCourseRequest): Promise<Course> => {
+export const updateCourse = async (id: string, courseData: Partial<UpdateCourseRequest>): Promise<Course> => {
   if (!id || id === 'undefined') {
     console.error('Invalid course ID provided for update:', id);
     return Promise.reject(new Error(`Invalid course ID for update: ${id}`));
   }
   
   try {
-    // Check if the id is a GUID (contains hyphens)
-    const isGuid = id.includes('-');
+    // Make sure we're not sending the id in the body if it's already in the URL
+    // This prevents duplicate ID issues that can cause 400 Bad Request errors
+    const { id: courseId, ...dataWithoutId } = courseData as any;
     
-    let response;
-    if (isGuid) {
-      response = await courseApi.put<Course>(`/guid/${id}`, courseData);
-    } else {
-      response = await courseApi.put<Course>(`/${id}`, courseData);
-    }
+    console.log('Sending update with data:', dataWithoutId);
     
+    // Always use the numeric ID endpoint with PUT method
+    // No longer using GUID endpoints as requested
+    const response = await courseApi.put<Course>(`/${id}`, dataWithoutId);
     return response.data;
   } catch (error) {
     return handleApiError(error, `Failed to update course with ID ${id}`);
@@ -310,14 +280,9 @@ export const deleteCourse = async (id: string): Promise<void> => {
   }
   
   try {
-    // Check if the id is a GUID (contains hyphens)
-    const isGuid = id.includes('-');
-    
-    if (isGuid) {
-      await courseApi.delete(`/guid/${id}`);
-    } else {
-      await courseApi.delete(`/${id}`);
-    }
+    // Always use the numeric ID endpoint
+    // No longer using GUID endpoints as requested
+    await courseApi.delete(`/${id}`);
     return Promise.resolve();
   } catch (error) {
     return handleApiError(error, `Failed to delete course with ID ${id}`);
@@ -385,4 +350,4 @@ export const removeMember = async (courseId: string, userId: string): Promise<vo
   } catch (error) {
     return handleApiError(error, `Failed to remove member ${userId} from course ${courseId}`);
   }
-}; 
+};

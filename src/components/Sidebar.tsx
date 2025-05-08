@@ -36,6 +36,8 @@ interface Class {
   section: string;
   teacherName?: string;
   color?: string;
+  courseId?: number;
+  courseGuid?: string;
 }
 
 // Function to generate a unique key even for items with undefined IDs
@@ -45,6 +47,24 @@ const generateUniqueKey = (prefix: string, item: Class) => {
     return `${prefix}-${item.name}-${item.section}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   }
   return `${prefix}-${item.id}`;
+};
+
+// Function to get a consistent color for a class
+const getClassColor = (classItem: Partial<Class>, defaultColor = '#4285f4'): string => {
+  // First check for explicit color property
+  if (classItem.color && classItem.color !== 'undefined') {
+    return classItem.color;
+  }
+  
+  // Generate a consistent color based on the class name if available
+  if (classItem.name) {
+    const colors = ['#4285f4', '#0f9d58', '#f4b400', '#db4437', '#673ab7', '#ff6d00', '#795548'];
+    const hash = classItem.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  }
+  
+  // Fallback to default
+  return defaultColor;
 };
 
 export default function Sidebar({ isCollapsed }: SidebarProps) {
@@ -72,12 +92,23 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   // Update teaching classes when courses data changes
   useEffect(() => {
     if (courses) {
-      const formattedCourses = courses.map(course => ({
-        id: course.id,
-        name: course.name,
-        section: course.section || '',
-        color: course.color || '#4285f4'
-      }));
+      console.log("Courses data received:", JSON.stringify(courses, null, 2));
+      const formattedCourses = courses.map(course => {
+        console.log(`Processing course: ${course.name}, original color: ${course.color}, ID: ${course.id || course.courseId?.toString() || course.courseGuid}`);
+        const calculatedColor = getClassColor({name: course.name, id: course.id || ''});
+        console.log(`Calculated color: ${calculatedColor}`);
+        
+        return {
+          id: course.id,
+          name: course.name,
+          section: course.section || '',
+          // Use explicit color if available, otherwise calculate based on name
+          color: course.color || calculatedColor,
+          courseId: course.courseId,
+          courseGuid: course.courseGuid
+        };
+      });
+      console.log("Formatted courses:", JSON.stringify(formattedCourses, null, 2));
       setTeachingClasses(formattedCourses);
     }
   }, [courses]);
@@ -103,10 +134,19 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     // Add event listener for the new class-created event
     const handleClassCreatedEvent = (event: CustomEvent) => {
       if (event.detail?.action === 'addClass' && event.detail.class) {
+        console.log("Adding class from event:", event.detail.class);
         setTeachingClasses(prevClasses => {
           const exists = prevClasses.some(cls => cls.id === event.detail.class.id);
           if (exists) return prevClasses;
-          return [...prevClasses, event.detail.class];
+          
+          // Make sure we get the color property
+          const newClass = {
+            ...event.detail.class,
+            color: event.detail.class.color || getClassColor(event.detail.class)
+          };
+          
+          console.log("Adding to sidebar with color:", newClass.color);
+          return [...prevClasses, newClass];
         });
       }
     };
@@ -290,18 +330,25 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       room: ''
     };
 
+    console.log("Creating course with color:", courseData.color);
+
     // Call the API to create the course
     createCourse(courseData)
       .then(createdCourse => {
         console.log('Created new course:', createdCourse);
+        console.log('Returned color:', createdCourse.color);
 
         // Create a new class object for state update
         const newClassObj = {
-          id: createdCourse.id,
+          id: createdCourse.id || createdCourse.courseId?.toString() || createdCourse.courseGuid,
           name: createdCourse.name,
-          section: createdCourse.section,
-          color: createdCourse.color
+          section: createdCourse.section || '',
+          color: createdCourse.color || courseData.color || '#4285f4',
+          courseId: createdCourse.courseId,
+          courseGuid: createdCourse.courseGuid
         };
+
+        console.log('New class object for sidebar:', newClassObj);
 
         // Update state immediately with functional update
         setTeachingClasses(prevClasses => {
@@ -317,7 +364,13 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         setNewClass({ name: '', section: '', color: '#4285f4' });
 
         // Navigate to the new class page
-        navigate(`/class/${createdCourse.id}`);
+        navigate(`/class/${createdCourse.id}`, {
+          state: {
+            className: createdCourse.name,
+            section: createdCourse.section,
+            color: createdCourse.color || newClass.color || '#4285f4'
+          }
+        });
       })
       .catch(error => {
         console.error('Error creating class:', error);
@@ -466,18 +519,18 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                   return (
                     <div key={uniqueKey} className="group relative flex items-center">
                       <Link
-                        to={`/class/${classItem.id}`}
+                        to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
                         state={{
                           className: classItem.name,
                           section: classItem.section,
                           color: classItem.color,
-                          coverImage: getCoverImageForClass(classItem.id, classItem.name)
+                          coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
                         }}
                         className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
                       >
                         <div
                           className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                          style={{ backgroundColor: classItem.color || '#4285f4' }}
+                          style={{ backgroundColor: getClassColor(classItem) }}
                         >
                           {(classItem.name || '?').charAt(0).toUpperCase()}
                         </div>
@@ -489,16 +542,26 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                       <button
                         onClick={() => {
                           // Delete the course via API
-                          deleteCourse(classItem.id)
+                          const courseIdToDelete = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
+                          if (!courseIdToDelete) {
+                            console.error('Cannot delete course - no valid ID found');
+                            return;
+                          }
+                          
+                          deleteCourse(courseIdToDelete)
                             .then(() => {
-                              console.log(`Deleted course: ${classItem.id}`);
+                              console.log(`Deleted course: ${courseIdToDelete}`);
                               // Update local state
-                              setTeachingClasses(prevClasses => prevClasses.filter(cls => cls.id !== classItem.id));
+                              setTeachingClasses(prevClasses => prevClasses.filter(cls => 
+                                cls.id !== courseIdToDelete && 
+                                cls.courseId?.toString() !== courseIdToDelete && 
+                                cls.courseGuid !== courseIdToDelete
+                              ));
                               // Invalidate course queries to refresh data
                               queryClient.invalidateQueries({ queryKey: ['courses'] });
                             })
                             .catch(error => {
-                              console.error(`Failed to delete course ${classItem.id}:`, error);
+                              console.error(`Failed to delete course ${courseIdToDelete}:`, error);
                             });
                         }}
                         className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"

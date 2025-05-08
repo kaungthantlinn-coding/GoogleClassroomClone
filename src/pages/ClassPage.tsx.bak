@@ -17,6 +17,14 @@ import classroomImage from '../assets/classroom.png';
 
 import { Assignment, getUpcomingAssignments } from '../types/assignment';
 
+// Breakpoint values for responsive design
+const BREAKPOINTS = {
+  sm: 640,  // Small devices
+  md: 768,  // Medium devices
+  lg: 1024, // Large devices
+  xl: 1280  // Extra large devices
+};
+
 // Use the Assignment interface from our types
 
 // Helper functions moved to utilities or where they're used
@@ -80,21 +88,29 @@ export default function ClassPage() {
     return <Navigate to="/" replace />;
   }
 
-  // Get the course data from the API using React Query
-  const { data: courseData, refetch: refetchCourseData } = useQuery<Course>({
-    queryKey: ['course', classId],
-    queryFn: async () => {
-      try {
-        if (!classId) {
-          console.error('Invalid course ID provided: undefined');
-          throw new Error('Invalid course ID: undefined');
-        }
-        
-        console.log(`Fetching fresh course data for ID: ${classId}`);
-        const course = await getCourseById(classId);
-        
-        // Ensure we have a consistent ID format
-        if (course.courseId && !course.id) {
+  // Helper function to determine responsive image size
+  const getResponsiveImageSize = (): string => {
+    // Default size for larger screens
+    let size = '1600x900';
+
+    // Check if window is available (client-side)
+    if (typeof window !== 'undefined') {
+      const width = window.innerWidth;
+
+      if (width < BREAKPOINTS.sm) {
+        // Small mobile devices
+        size = '640x360';
+      } else if (width < BREAKPOINTS.md) {
+        // Larger mobile devices
+        size = '768x432';
+      } else if (width < BREAKPOINTS.lg) {
+        // Tablets
+        size = '1024x576';
+      } else if (width < BREAKPOINTS.xl) {
+        // Small desktops
+        size = '1280x720';
+    }
+  );
           course.id = course.courseId.toString();
         }
         
@@ -104,26 +120,6 @@ export default function ClassPage() {
           console.log('Course GUID:', course.courseGuid);
         }
         
-        // Log theme data from the API for debugging
-        console.log('Course data from API:', {
-          color: course.color,
-          coverImage: course.coverImage
-        });
-        
-        // Very important: Set class data and theme here to ensure they're always updated
-        setTimeout(() => {
-          // We use setTimeout to ensure this runs after the component has fully mounted
-          // and after the query has returned data
-          if (course) {
-            console.log('Setting class data and theme from API:', {
-              color: course.color,
-              coverImage: course.coverImage
-            });
-            
-            window.dispatchEvent(new CustomEvent('courseDataRefreshed', { detail: course }));
-          }
-        }, 50);
-        
         return course;
       } catch (error) {
         console.error('Error fetching course:', error);
@@ -131,10 +127,7 @@ export default function ClassPage() {
       }
     },
     enabled: !!classId && classId !== 'undefined',
-    refetchOnMount: 'always', // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refresh when window regains focus
-    refetchOnReconnect: true,  // Refresh when reconnecting
-    staleTime: 0  // Data is always considered stale
+    retry: 1 // Limit retries to avoid too many failed API calls
   });
 
   // Merge course data with location state if provided
@@ -276,7 +269,7 @@ export default function ClassPage() {
     }
   };
 
-  // Update state when location changes or when route is revisited
+  // Update state when location changes
   useEffect(() => {
     if (location.state && classId) {
       setClassData(prevData => ({
@@ -284,11 +277,7 @@ export default function ClassPage() {
         ...location.state
       }));
     }
-    
-    // When returning to this page, refresh the course data
-    // This ensures we get the latest theme from the API
-    refetchCourseData();
-  }, [location.state, classId, location.pathname, refetchCourseData]);
+  }, [location.state, classId]);
 
   // Update document title when class data changes
   useEffect(() => {
@@ -296,140 +285,6 @@ export default function ClassPage() {
     const section = classData.section ? ` - ${classData.section}` : '';
     document.title = `${className}${section} - Google Classroom`;
   }, [classData]);
-  
-  // Handle theme update events from anywhere in the app
-  useEffect(() => {
-    // Handler for themeUpdated events
-    const handleThemeUpdated = (event: any) => {
-      const { courseId: updatedCourseId, theme: updatedTheme } = event.detail;
-      
-      // Only update if this is for our current class
-      if (updatedCourseId === classId || updatedCourseId === classData.courseGuid) {
-        console.log('Theme update event received for this class:', updatedTheme);
-        
-        // Force update class data
-        setClassData(prevData => ({
-          ...prevData,
-          color: updatedTheme.color,
-          coverImage: updatedTheme.coverImage
-        }));
-        
-        // Force update theme
-        setTheme({
-          color: updatedTheme.color,
-          image: updatedTheme.coverImage
-        });
-      }
-    };
-    
-    // Load theme from cache on initial load or when navigating back
-    const loadThemeFromCache = () => {
-      try {
-        // Get theme cache from localStorage
-        const themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
-        
-        // Check if we have cached theme for this course
-        const cachedTheme = themeCache[classId || ''] || 
-                           (classData.courseGuid ? themeCache[classData.courseGuid] : null);
-        
-        if (cachedTheme) {
-          console.log('Found cached theme for this class:', cachedTheme);
-          
-          // Update class data and theme from cache
-          setClassData(prevData => ({
-            ...prevData,
-            color: cachedTheme.color,
-            coverImage: cachedTheme.coverImage
-          }));
-          
-          setTheme({
-            color: cachedTheme.color,
-            image: cachedTheme.coverImage
-          });
-        }
-      } catch (error) {
-        console.error('Error loading theme from cache:', error);
-      }
-    };
-    
-    // Add event listeners
-    window.addEventListener('themeUpdated', handleThemeUpdated);
-    window.addEventListener('focus', loadThemeFromCache);
-    
-    // Load theme from cache on initial mount
-    loadThemeFromCache();
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('themeUpdated', handleThemeUpdated);
-      window.removeEventListener('focus', loadThemeFromCache);
-    };
-  }, [classId, classData.courseGuid]);
-  
-  // Always ensure the latest API data updates our UI
-  useEffect(() => {
-    if (courseData) {
-      // Check localStorage first for the most recent theme
-      try {
-        const themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
-        const cachedTheme = themeCache[classId || ''] || 
-                           (courseData.courseGuid ? themeCache[courseData.courseGuid] : null);
-        
-        if (cachedTheme && cachedTheme.updatedAt) {
-          // Use cached theme from localStorage
-          console.log('Using theme from cache:', cachedTheme);
-          
-          setClassData(prevData => ({
-            ...prevData,
-            ...courseData,
-            color: cachedTheme.color,
-            coverImage: cachedTheme.coverImage
-          }));
-          
-          setTheme({
-            color: cachedTheme.color,
-            image: cachedTheme.coverImage
-          });
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking theme cache:', error);
-      }
-      
-      // If no cache or cache is old, use API data
-      console.log('Using theme from API data:', {
-        color: courseData.color,
-        coverImage: courseData.coverImage
-      });
-      
-      setClassData(prevData => ({
-        ...prevData,
-        ...courseData
-      }));
-    }
-  }, [courseData, classId]);
-  
-  // Update classData and theme when courseData changes
-  useEffect(() => {
-    if (courseData) {
-      console.log('Course data updated from API, refreshing theme:', {
-        color: courseData.color,
-        coverImage: courseData.coverImage
-      });
-      
-      // Update the class data with the latest from the API
-      setClassData(prevData => ({
-        ...prevData,
-        ...courseData
-      }));
-      
-      // Update the theme state with the latest values
-      setTheme({
-        color: courseData.color || '#1a73e8',
-        image: courseData.coverImage || classroomImage
-      });
-    }
-  }, [courseData]);
 
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -453,6 +308,8 @@ export default function ClassPage() {
       return;
     }
 
+    // We no longer need an updatedClassData object as we're just sending theme data
+
     // Update the class data in state immediately
     setClassData(prevData => ({
       ...prevData,
@@ -462,52 +319,11 @@ export default function ClassPage() {
 
     setTheme(newTheme);
 
-    // For theme updates, we only need to send the theme-related data
-    // We're using the dedicated theme API endpoint now
-    const themeData = {
+    // Update just the course theme via the real-world API using POST method
+    updateCourseTheme(classData.courseGuid || classId, {
       color: newTheme.color,
       coverImage: newTheme.image
-    };
-    
-    console.log('Updating theme with specific color:', newTheme.color);
-    console.log('Full theme update data:', themeData);
-    
-    // IMPORTANT: Cache the theme in localStorage to ensure it persists between page navigations
-    try {
-      const courseId = classData.courseGuid || classId;
-      const themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
-      
-      // Store in cache with both course ID and GUID for maximum reliability
-      if (classId) {
-        themeCache[classId] = {
-          ...themeData,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      
-      if (classData.courseGuid) {
-        themeCache[classData.courseGuid] = {
-          ...themeData,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      
-      localStorage.setItem('themeCache', JSON.stringify(themeCache));
-      console.log('Theme cached in localStorage for course:', courseId);
-      
-      // CRITICAL: Dispatch global event to notify other components of theme change
-      window.dispatchEvent(new CustomEvent('themeUpdated', {
-        detail: {
-          courseId: courseId,
-          theme: themeData
-        }
-      }));
-    } catch (error) {
-      console.error('Error caching theme to localStorage:', error);
-    }
-    
-    // Use updateCourseTheme which now uses the correct theme endpoint
-    updateCourseTheme(classData.courseGuid || classId, themeData)
+    })
       .then(() => {
         // Invalidate course queries to refresh data
         queryClient.invalidateQueries({ queryKey: ['course', classId] });
@@ -544,12 +360,12 @@ export default function ClassPage() {
     });
   };
 
-  // Render banner with direct image from the API - no fallbacks
+  // Render the banner with image from the API
   const renderBanner = () => {
     // Use the theme image directly from the API
     const imageUrl = theme.image && isValidImageUrl(theme.image) 
       ? theme.image 
-      : '';
+      : 'https://images.pexels.com/photos/256520/pexels-photo-256520.jpeg'; // Default image
 
     return (
       <div className="max-w-[1000px] mx-auto px-6 mt-6">
