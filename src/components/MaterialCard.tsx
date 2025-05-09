@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileText, MoreVertical, Edit, Trash, Link as LinkIcon, BookOpen } from 'lucide-react';
 
 interface MaterialCardProps {
-  id: string;
+  id?: string;
   title: string;
   description?: string;
   attachments?: {
@@ -26,23 +26,64 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  // Check if we have a valid ID
+  const hasValidId = !!id && (typeof id === 'string' || typeof id === 'number');
+  
+  // Log the ID for debugging purposes
+  console.log(`Material Card ID: ${id}, Valid: ${hasValidId}`);
+  
+  // For string IDs, ensure we can extract a numeric part if needed
+  const extractNumericId = () => {
+    if (!id) return null;
+    if (!isNaN(Number(id))) return id;
+    const match = id.toString().match(/\d+/);
+    return match ? match[0] : null;
+  };
 
   const handleEdit = () => {
-    if (onEdit) {
+    if (onEdit && hasValidId) {
       onEdit(id);
     }
     setShowMenu(false);
   };
 
   const handleDeleteClick = () => {
+    // Only attempt deletion if we have a valid ID
+    if (!hasValidId) {
+      console.error('Cannot delete material: Missing or invalid ID');
+      alert('This material cannot be deleted because it doesn\'t have a valid ID.');
+      setShowMenu(false);
+      return;
+    }
+    
     setShowMenu(false);
     setShowDeleteConfirmation(true);
   };
 
   const confirmDelete = () => {
-    if (onDelete) {
-      onDelete(id);
+    // Double-check that we have both a valid ID and delete handler
+    if (!hasValidId || !id) {
+      console.error('Cannot delete material: Missing or invalid ID');
+      setShowDeleteConfirmation(false);
+      return;
     }
+    
+    if (!onDelete) {
+      console.error('Cannot delete material: Delete handler not provided');
+      setShowDeleteConfirmation(false);
+      return;
+    }
+    
+    try {
+      // Use the extracted numeric ID if helpful for API
+      const numericId = extractNumericId();
+      console.log(`Deleting material with ID: ${id}, extracted ID: ${numericId}`);
+      onDelete(id);
+    } catch (error) {
+      console.error('Error when attempting to delete material:', error);
+    }
+    
     setShowDeleteConfirmation(false);
   };
 
@@ -109,13 +150,15 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
                   <Edit size={16} className="text-[#5f6368]" />
                   Edit
                 </button>
-                <button 
-                  onClick={handleDeleteClick}
-                  className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left text-red-600 rounded-b-xl"
-                >
-                  <Trash size={16} />
-                  Delete
-                </button>
+                {hasValidId && onDelete && (
+                  <button 
+                    onClick={handleDeleteClick}
+                    className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left text-red-600 rounded-b-xl"
+                  >
+                    <Trash size={16} />
+                    Delete
+                  </button>
+                )}
               </div>
             )}
             <button 

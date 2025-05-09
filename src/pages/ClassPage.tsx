@@ -175,28 +175,33 @@ export default function ClassPage() {
 
   // Load upcoming assignments when the component mounts or when classId changes
   useEffect(() => {
-    if (classId) {
-      loadUpcomingAssignments();
-
-      // Listen for assignment updates
-      const handleAssignmentUpdate = () => {
-        loadUpcomingAssignments();
-      };
-
-      window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
-      window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
-      window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
-
-      return () => {
-        window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
-        window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
-        window.removeEventListener('newAssignmentCreated', handleAssignmentUpdate);
-      };
+    if (classId && classId !== 'undefined') {
+      loadAnnouncements();
+      loadUpcomingAssignments().catch(error => 
+        console.error('Error loading assignments in useEffect:', error)
+      );
     }
+
+    // Listen for assignment updates
+    const handleAssignmentUpdate = () => {
+      loadUpcomingAssignments().catch(error => 
+        console.error('Error loading assignments after update:', error)
+      );
+    };
+
+    window.addEventListener('assignmentUpdated', handleAssignmentUpdate);
+    window.addEventListener('assignmentDeleted', handleAssignmentUpdate);
+    window.addEventListener('newAssignmentCreated', handleAssignmentUpdate);
+
+    return () => {
+      window.removeEventListener('assignmentUpdated', handleAssignmentUpdate);
+      window.removeEventListener('assignmentDeleted', handleAssignmentUpdate);
+      window.removeEventListener('newAssignmentCreated', handleAssignmentUpdate);
+    };
   }, [classId]);
 
   // Function to load upcoming assignments
-  const loadUpcomingAssignments = () => {
+  const loadUpcomingAssignments = async () => {
     if (!classId || classId === 'undefined' || classId === 'null') {
       console.log('Invalid classId for loading assignments:', classId);
       setAllUpcomingAssignments([]);
@@ -205,7 +210,7 @@ export default function ClassPage() {
     }
     
     try {
-      const assignments = getUpcomingAssignments(classId);
+      const assignments = await getUpcomingAssignments(classId);
 
       // Store all assignments
       setAllUpcomingAssignments(assignments);

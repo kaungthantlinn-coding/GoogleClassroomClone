@@ -10,6 +10,8 @@ import { Slider } from '../components/ui/slider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui/select';
 import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { useStudentData } from '../contexts/StudentDataContext';
+import * as storageApi from '../api/storageApi';
+import * as assignmentApi from '../api/assignmentApi';
 
 interface Submission {
   id: string;
@@ -60,113 +62,109 @@ const SubmissionsPage: React.FC = () => {
   const classId = getClassIdFromPath();
 
   // Initialize with static data instead of empty values that would trigger API calls
-  const [assignment] = useState(() => {
-    // Try to get assignment data from localStorage if available
-    let assignmentData = {
-      id: assignmentId || '',
-      title: 'Test',
-      courseName: 'FullStack',
-      points: '100',
-      className: location.state?.className || 'FullStack',
-      section: location.state?.section || 'Batch 2',
-    };
-
-    // Check if we have class data in localStorage
-    if (classId) {
-      try {
-        const classDataStr = localStorage.getItem(`classData-${classId}`);
-        if (classDataStr) {
-          const classData = JSON.parse(classDataStr);
-          if (classData) {
-            assignmentData.className = classData.name || classData.className || assignmentData.className;
-            assignmentData.section = classData.section || assignmentData.section;
-          }
-        }
-      } catch (e) {
-        console.error('Error loading class data from localStorage', e);
-      }
-    }
-
-    // Check if we have assignment data in localStorage
-    try {
-      const assignmentKey = `assignment-${assignmentId}`;
-      const storedAssignment = localStorage.getItem(assignmentKey);
-      if (storedAssignment) {
-        const parsedAssignment = JSON.parse(storedAssignment);
-        if (parsedAssignment) {
-          assignmentData = {
-            ...assignmentData,
-            ...parsedAssignment,
-          };
-        }
-      }
-    } catch (e) {
-      console.error('Error loading assignment data from localStorage', e);
-    }
-
-    return assignmentData;
+  const [assignment, setAssignment] = useState({
+    id: assignmentId || '',
+    title: 'Loading...',
+    courseName: 'Loading...',
+    points: '100',
+    className: location.state?.className || 'Loading...',
+    section: location.state?.section || '',
   });
+
+  // Load assignment data from API
+  useEffect(() => {
+    const loadAssignmentData = async () => {
+      if (!assignmentId) return;
+      
+      try {
+        // Fetch assignment by ID from API
+        const assignmentData = await assignmentApi.getAssignment(assignmentId);
+        
+        // Update state with the fetched data
+        setAssignment(prev => ({
+          ...prev,
+          ...assignmentData,
+          // Ensure we have these fields even if API doesn't provide them
+          className: assignmentData.className || location.state?.className || prev.className,
+          section: assignmentData.section || location.state?.section || prev.section,
+        }));
+      } catch (error) {
+        console.error('Error loading assignment data from API:', error);
+      }
+    };
+    
+    loadAssignmentData();
+  }, [assignmentId, location.state?.className, location.state?.section]);
 
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Get submissions from StudentDataContext
+  // Submissions state
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const { submissions: contextSubmissions } = useStudentData();
   
-  // Use submissions from context or load from localStorage
-  const [submissions, setSubmissions] = useState<Submission[]>(() => {
-    // If we have submissions in context, use those
-    if (contextSubmissions && contextSubmissions.length > 0) {
-      return contextSubmissions;
-    }
-    
-    // Otherwise, try to load from localStorage
-    try {
-      const savedSubmissions = localStorage.getItem('submissions');
-      if (savedSubmissions) {
-        return JSON.parse(savedSubmissions);
+  // Load submissions from API
+  useEffect(() => {
+    const loadSubmissions = async () => {
+      if (!assignmentId) return;
+      
+      try {
+        // Use existing submissions from context if available
+        if (contextSubmissions && contextSubmissions.length > 0) {
+          setSubmissions(contextSubmissions);
+          return;
+        }
+        
+        // Otherwise fetch from API
+        const submissionsData = await assignmentApi.getSubmissions(assignmentId);
+        
+        if (submissionsData && submissionsData.length > 0) {
+          setSubmissions(submissionsData);
+        } else {
+          // Fallback to default mock data
+          setSubmissions([
+            {
+              id: 'sub-1001',
+              studentName: 'Alice Smith',
+              studentId: '1001',
+              status: 'submitted',
+              submittedDate: 'June 12th, 2023 10:00 PM',
+            },
+            {
+              id: 'sub-1002',
+              studentName: 'Bob Johnson',
+              studentId: '1002',
+              status: 'late',
+              submittedDate: 'June 17th, 2023 09:30 PM',
+            },
+            {
+              id: 'sub-1003',
+              studentName: 'Charlie Davis',
+              studentId: '1003',
+              status: 'graded',
+              submittedDate: 'June 10th, 2023 08:15 PM',
+              grade: 100,
+              letterGrade: 'A',
+              gradePercentage: 100
+            },
+            {
+              id: 'sub-1004',
+              studentName: 'Diana Wilson',
+              studentId: '1004',
+              status: 'missing',
+              submittedDate: '',
+            },
+          ]);
+        }
+      } catch (error) {
+        console.error('Error loading submissions from API:', error);
       }
-    } catch (e) {
-      console.error('Error loading submissions from localStorage', e);
-    }
+    };
     
-    // Fallback to default data
-    return [
-      {
-        id: 'sub-1001',
-        studentName: 'Alice Smith',
-        studentId: '1001',
-        status: 'submitted',
-        submittedDate: 'June 12th, 2023 10:00 PM',
-      },
-      {
-        id: 'sub-1002',
-        studentName: 'Bob Johnson',
-        studentId: '1002',
-        status: 'late',
-        submittedDate: 'June 17th, 2023 09:30 PM',
-      },
-      {
-        id: 'sub-1003',
-        studentName: 'Charlie Davis',
-        studentId: '1003',
-        status: 'graded',
-        submittedDate: 'June 10th, 2023 08:15 PM',
-        grade: 100,
-        letterGrade: 'A',
-        gradePercentage: 100
-      },
-      {
-        id: 'sub-1004',
-        studentName: 'Diana Wilson',
-        studentId: '1004',
-        status: 'missing',
-        submittedDate: '',
-      },
-    ];
-  });
+    loadSubmissions();
+  }, [assignmentId, contextSubmissions]);
 
-  // Store class data for consistent navigation
+  // Store class data for API cache consistency
   useEffect(() => {
     if (classId && assignment) {
       try {
@@ -175,9 +173,11 @@ const SubmissionsPage: React.FC = () => {
           section: assignment.section || '',
           id: classId
         };
-        localStorage.setItem(`classData-${classId}`, JSON.stringify(classData));
+        // Save class data to API cache
+        storageApi.saveClassData(classId, classData)
+          .catch(error => console.error('Error saving class data to API:', error));
       } catch (e) {
-        console.error('Error saving class data to localStorage', e);
+        console.error('Error preparing class data for API:', e);
       }
     }
   }, [classId, assignment]);

@@ -97,18 +97,28 @@ const ClassworkPage = () => {
   };
 
   // Function to load assignments
-  const loadAssignments = () => {
+  const loadAssignments = async () => {
     if (classId) {
-      const classAssignments = getClassAssignments(classId);
-      setAssignments(classAssignments);
+      try {
+        const classAssignments = await getClassAssignments(classId);
+        setAssignments(classAssignments);
+      } catch (error) {
+        console.error('Error loading assignments:', error);
+        setAssignments([]);
+      }
     }
   };
   
   // Function to load materials
-  const loadMaterials = () => {
+  const loadMaterials = async () => {
     if (classId) {
-      const classMaterials = getClassMaterials(classId);
-      setMaterials(classMaterials);
+      try {
+        const classMaterials = await getClassMaterials(classId);
+        setMaterials(classMaterials);
+      } catch (error) {
+        console.error('Error loading materials:', error);
+        setMaterials([]);
+      }
     }
   };
   
@@ -138,7 +148,7 @@ const ClassworkPage = () => {
 
   // Update document title when class data changes
   useEffect(() => {
-    const className = classData.className || 'Class';
+    const className = classData.name || 'Class';
     const section = classData.section ? ` - ${classData.section}` : '';
     document.title = `${className}${section} - Classwork - Google Classroom`;
   }, [classData]);
@@ -203,12 +213,23 @@ const ClassworkPage = () => {
     setShowAssignmentForm(true);
   };
 
-  const handleDeleteAssignment = (id: string) => {
-    // Delete the assignment using our utility function
-    deleteAssignment(id);
+  const handleDeleteAssignment = async (id: string) => {
+    if (!id) {
+      console.error('Cannot delete assignment: ID is undefined');
+      return;
+    }
+
+    console.log('Deleting assignment with ID:', id);
     
-    // Update the local state
-    setAssignments(assignments.filter(assignment => assignment.id !== id));
+    try {
+      // Delete the assignment using our utility function
+      await deleteAssignment(id);
+      
+      // Reload assignments after deletion
+      loadAssignments();
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+    }
   };
 
   const handleEditMaterial = (id: string) => {
@@ -216,12 +237,23 @@ const ClassworkPage = () => {
     setShowMaterialForm(true);
   };
 
-  const handleDeleteMaterial = (id: string) => {
-    // Delete the material using our utility function
-    deleteMaterial(id);
+  const handleDeleteMaterial = async (id: string) => {
+    if (!id) {
+      console.error('Cannot delete material: ID is undefined');
+      return;
+    }
+
+    console.log('Deleting material with ID:', id);
     
-    // Update the local state
-    setMaterials(materials.filter(material => material.id !== id));
+    try {
+      // Delete the material using our utility function
+      await deleteMaterial(id);
+      
+      // Reload materials after deletion
+      loadMaterials();
+    } catch (error) {
+      console.error('Error deleting material:', error);
+    }
   };
 
   // Get the current assignment being edited
@@ -303,7 +335,7 @@ const ClassworkPage = () => {
           setCurrentEditingAssignment(null);
         }}
         onSubmit={handleAssignmentSubmit}
-        className={classData.className}
+        className={classData.name}
         assignmentToEdit={getCurrentAssignment()}
       />
 
@@ -315,7 +347,7 @@ const ClassworkPage = () => {
           setCurrentEditingMaterial(null);
         }}
         onSubmit={handleMaterialSubmit}
-        className={classData.className}
+        className={classData.name}
         materialToEdit={getCurrentMaterial()}
       />
 
@@ -342,13 +374,13 @@ const ClassworkPage = () => {
               </div>
               {expandedTopics[topic] && (
                 <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-white">
-                  {itemsByTopic[topic].map((item) => {
+                  {itemsByTopic[topic].map((item, index) => {
                     // Check if the item is an assignment (has 'instructions' property)
                     if ('instructions' in item) {
                       const assignment = item as Assignment;
                       return (
                         <AssignmentCard 
-                          key={assignment.id}
+                          key={assignment.id ? `assignment-${assignment.id}` : `temp-assignment-${index}`}
                           id={assignment.id}
                           title={assignment.title}
                           description={assignment.instructions}
@@ -363,7 +395,7 @@ const ClassworkPage = () => {
                       const material = item as Material;
                       return (
                         <MaterialCard 
-                          key={material.id}
+                          key={material.id ? `material-${material.id}` : `temp-material-${index}`}
                           id={material.id}
                           title={material.title}
                           description={material.description}

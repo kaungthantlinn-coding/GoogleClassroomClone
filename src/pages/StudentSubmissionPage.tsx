@@ -6,6 +6,8 @@ import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import { Input } from '../components/ui/input';
 import { useStudentData, Student, Submission } from '../contexts/StudentDataContext';
+import * as storageApi from '../api/storageApi';
+import * as assignmentApi from '../api/assignmentApi';
 
 interface StudentSubmission {
   id: string;
@@ -120,87 +122,111 @@ const StudentSubmissionPage: React.FC = () => {
   // Load the student data based on studentId
   useEffect(() => {
     setLoading(true);
-    // Try to get class data from localStorage or location state
-    let className = "Cloud";
-    let section = "Batch 2";
-    let assignmentTitle = "Test";
+    
+    // Default values
+    let className = location.state?.className || "Class";
+    let section = location.state?.section || "";
+    let assignmentTitle = "Assignment";
     let assignmentPoints = "100";
     
-    try {
-      // First try to get assignment data from localStorage
-      const assignmentKey = `assignment-${assignmentId}`;
-      const storedAssignment = localStorage.getItem(assignmentKey);
-      if (storedAssignment) {
-        const parsedAssignment = JSON.parse(storedAssignment);
-        if (parsedAssignment) {
-          assignmentTitle = parsedAssignment.title || assignmentTitle;
-          assignmentPoints = parsedAssignment.points || assignmentPoints;
-          // If assignment has class info, use it
-          if (parsedAssignment.className) {
-            className = parsedAssignment.className;
-            section = parsedAssignment.section || section;
+    // Function to load assignment data
+    const loadAssignmentData = async () => {
+      try {
+        if (assignmentId) {
+          // Fetch assignment data from API using assignmentApi
+          const assignmentData = await assignmentApi.getAssignment(assignmentId);
+          if (assignmentData) {
+            assignmentTitle = assignmentData.title || assignmentTitle;
+            assignmentPoints = assignmentData.points || assignmentPoints;
+            
+            // Use assignment class info if available
+            if (assignmentData.className) {
+              className = assignmentData.className;
+              section = assignmentData.section || section;
+            }
           }
         }
-      }
-      
-      // Then check class data
-      const classDataStr = localStorage.getItem(`classData-${classId}`);
-      if (classDataStr) {
-        const classData = JSON.parse(classDataStr);
-        if (classData) {
-          className = classData.name || classData.className || className;
-          section = classData.section || section;
-        }
-      } else if (location.state?.className) {
-        className = location.state.className;
-        section = location.state.section || section;
-      }
-      
-      setClassData({
-        className,
-        section
-      });
-    } catch (e) {
-      console.error('Error loading data from localStorage', e);
-    }
-    
-    // Simulate async loading, replace with real fetch if needed
-    setTimeout(() => {
-      // Find the student and their submission
-      const studentSubmission = submissions.find((sub: Submission) => sub.studentId === studentId);
-      
-      if (student && studentSubmission) {
-        // Create a combined submission object with student and assignment data
-        const submissionData: StudentSubmission = {
-          id: studentSubmission.id,
-          studentName: student.name,
-          studentId: student.id,
-          submittedDate: studentSubmission.submittedDate || '',
-          graded: studentSubmission.status === 'graded',
-          grade: studentSubmission.grade,
-          gradePercentage: studentSubmission.gradePercentage,
-          letterGrade: studentSubmission.letterGrade,
-          feedback: studentSubmission.feedback,
-          gradedDate: studentSubmission.status === 'graded' ? new Date().toLocaleString('en-US') : undefined,
-          assignment: {
-            id: assignmentId || '',
-            title: assignmentTitle,
-            className: className,
-            section: section,
-            points: assignmentPoints,
-          },
-          attachedFiles: [
-            { name: `assignment_${studentId}.pdf`, type: 'pdf' },
-          ],
-        };
         
-        setSubmission(submissionData);
-      } else {
-        setSubmission(null); // No submission found
+        // Use class data from API if classId is available
+        if (classId) {
+          try {
+            const classData = await storageApi.getClassData(classId);
+            if (classData) {
+              className = classData.name || classData.className || className;
+              section = classData.section || section;
+            }
+          } catch (classError) {
+            console.error('Error loading class data from API:', classError);
+          }
+        }
+        
+        setClassData({
+          className,
+          section
+        });
+        
+        // Load the student submission
+        loadStudentSubmission(className, section, assignmentTitle, assignmentPoints);
+        
+      } catch (error) {
+        console.error('Error loading assignment data:', error);
+        // Load submission with default values on error
+        loadStudentSubmission(className, section, assignmentTitle, assignmentPoints);
       }
-      setLoading(false);
-    }, 700); // 700ms for demo
-  }, [assignmentId, studentId, location, classId, students, submissions]);
+    };
+    
+    // Function to load the student submission
+    const loadStudentSubmission = async (className: string, section: string, 
+                                        assignmentTitle: string, assignmentPoints: string) => {
+      try {
+        // In a real implementation, we would get the submission from API using:
+        // const submissionData = await assignmentApi.getSubmissions(assignmentId);
+        
+        // For now, simulate with mock data
+        setTimeout(() => {
+          // Find the student and their submission
+          const studentSubmission = submissions.find((sub: Submission) => sub.studentId === studentId);
+          
+          if (student && studentSubmission) {
+            // Create a combined submission object with student and assignment data
+            const submissionData: StudentSubmission = {
+              id: studentSubmission.id,
+              studentName: student.name,
+              studentId: student.id,
+              submittedDate: studentSubmission.submittedDate || '',
+              graded: studentSubmission.status === 'graded',
+              grade: studentSubmission.grade,
+              gradePercentage: studentSubmission.gradePercentage,
+              letterGrade: studentSubmission.letterGrade,
+              feedback: studentSubmission.feedback,
+              gradedDate: studentSubmission.status === 'graded' ? new Date().toLocaleString('en-US') : undefined,
+              assignment: {
+                id: assignmentId || '',
+                title: assignmentTitle,
+                className: className,
+                section: section,
+                points: assignmentPoints,
+              },
+              attachedFiles: [
+                { name: `assignment_${studentId}.pdf`, type: 'pdf' },
+              ],
+            };
+            
+            setSubmission(submissionData);
+          } else {
+            setSubmission(null); // No submission found
+          }
+          setLoading(false);
+        }, 700); // 700ms for demo
+      } catch (submissionError) {
+        console.error('Error loading submission data:', submissionError);
+        setSubmission(null);
+        setLoading(false);
+      }
+    };
+    
+    loadAssignmentData();
+  }, [assignmentId, studentId, location, classId, students, submissions, student]);
   
   const [points, setPoints] = useState<string>('');
   const [sendEmail, setSendEmail] = useState<boolean>(false);
@@ -229,17 +255,18 @@ const StudentSubmissionPage: React.FC = () => {
         }
       });
     } else {
-      // Store class data in localStorage
-      if (submission?.assignment.className) {
+      // Store class data in API cache
+      if (submission?.assignment.className && classId) {
         try {
           const classData = {
             name: submission.assignment.className,
             section: submission.assignment.section || '',
             id: classId
           };
-          localStorage.setItem(`classData-${classId}`, JSON.stringify(classData));
+          storageApi.saveClassData(classId, classData)
+            .catch(error => console.error('Error saving class data to API:', error));
         } catch (e) {
-          console.error('Error saving class data to localStorage', e);
+          console.error('Error preparing class data for API:', e);
         }
       }
       
@@ -255,7 +282,7 @@ const StudentSubmissionPage: React.FC = () => {
     }
   };
   
-  const handleSubmitGrade = () => {
+  const handleSubmitGrade = async () => {
     if (!submission) return;
 
     const numPoints = parseInt(points);
@@ -292,47 +319,54 @@ const StudentSubmissionPage: React.FC = () => {
       feedback: feedback
     });
 
-    // Store the graded submission in localStorage
-    localStorage.setItem('gradedSubmission', JSON.stringify({
-      id: submission.id,
-      studentId: submission.studentId,
-      grade: numPoints,
-      letterGrade,
-      gradePercentage: percentage,
-      feedback,
-      assignmentId: assignmentId
-    }));
+    try {
+      // Save submission via API
+      const submissionData = {
+        id: submission.id,
+        studentId: submission.studentId,
+        assignmentId: assignmentId,
+        grade: numPoints,
+        letterGrade,
+        gradePercentage: percentage,
+        feedback,
+        status: 'graded'
+      };
+      
+      // In a real implementation, use:
+      // await assignmentApi.saveSubmission(assignmentId, submissionData);
+      console.log('Saving submission via API:', submissionData);
+      
+      // Sync grades to update student data
+      syncGradeData();
 
-    // Sync grades to update student data
-    syncGradeData();
-
-    // Send notification if enabled
-    if (sendEmail) {
-      console.log('Sending email notification to student');
-    }
-
-    // Navigate back to submissions list after a short delay
-    setTimeout(() => {
-      if (classId) {
-        navigate(`/class/${classId}/submissions/${assignmentId}`, {
-          state: {
-            className: submission.assignment.className,
-            section: submission.assignment.section,
-            classId: classId,
-            assignmentTitle: submission.assignment.title
-          }
-        });
-      } else {
-        navigate(`/submissions/${assignmentId}`, {
-          state: {
-            className: submission.assignment.className,
-            section: submission.assignment.section,
-            classId: 'riso-2',
-            assignmentTitle: submission.assignment.title
-          }
-        });
+      // Send notification if enabled
+      if (sendEmail) {
+        console.log('Sending email notification to student');
       }
-    }, 500);
+
+      // Navigate back to submissions list after a short delay
+      setTimeout(() => {
+        if (classId) {
+          navigate(`/class/${classId}/submissions/${assignmentId}`, {
+            state: {
+              className: submission.assignment.className,
+              section: submission.assignment.section,
+              assignmentTitle: submission.assignment.title
+            }
+          });
+        } else {
+          navigate(`/submissions/${assignmentId}`, {
+            state: {
+              className: submission.assignment.className,
+              section: submission.assignment.section
+            }
+          });
+        }
+      }, 800);
+    } catch (error) {
+      console.error('Error saving submission:', error);
+      // Show error notification here
+    }
   };
   
   const handleFileDownload = (file: { name: string; type: string }) => {

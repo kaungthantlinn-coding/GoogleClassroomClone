@@ -3,7 +3,7 @@ import { FileText, Calendar, MoreVertical, Edit, Trash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface AssignmentCardProps {
-  id: string;
+  id?: string; // Make id optional to handle cases where it might be undefined
   title: string;
   description?: string;
   points: string;
@@ -21,6 +21,20 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   onEdit,
   onDelete
 }) => {
+  // Check if this assignment has a valid ID
+  const hasValidId = !!id && (typeof id === 'string' || typeof id === 'number');
+  
+  // Log the ID for debugging purposes
+  console.log(`Assignment Card ID: ${id}, Valid: ${hasValidId}`);
+  
+  // For string IDs, ensure we can extract a numeric part if needed
+  const extractNumericId = () => {
+    if (!id) return null;
+    if (!isNaN(Number(id))) return id;
+    const match = id.toString().match(/\d+/);
+    return match ? match[0] : null;
+  };
+
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -42,10 +56,24 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   };
 
   const handleEdit = () => {
+    if (!hasValidId) {
+      alert('This assignment cannot be edited because it has no ID. Please contact the administrator.');
+      setShowMenu(false);
+      return;
+    }
+    
     if (onEdit) {
       onEdit(id);
     }
     setShowMenu(false);
+  };
+
+  // Function to handle delete button clicks
+  const handleDeleteClick = () => {
+    // We know delete functionality is available if the button appears
+    // So we just need to close the menu and show the confirmation
+    setShowMenu(false);
+    setShowDeleteConfirmation(true);
   };
 
   useEffect(() => {
@@ -82,7 +110,12 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow" id={`assignment-${id}`}>
+      <div className={`bg-white border ${!hasValidId ? 'border-red-300' : 'border-gray-200'} rounded-lg p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow`} id={`assignment-${id || 'no-id'}`}>
+        {!hasValidId && (
+          <div className="mb-2 text-xs text-red-500 bg-red-50 p-1 rounded">
+            Warning: This assignment has no ID and cannot be edited or deleted
+          </div>
+        )}
         <div className="flex justify-between items-start mb-2">
           <div className="flex items-start gap-2 sm:gap-3">
             <FileText className="text-[#1a73e8] mt-1 sm:w-5 sm:h-5" size={18} />
@@ -109,16 +142,15 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
                     <Edit size={16} className="text-[#5f6368]" />
                     Edit
                   </button>
-                  <button 
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowDeleteConfirmation(true);
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-red-600 flex items-center gap-2"
-                  >
-                    <Trash size={16} />
-                    Delete
-                  </button>
+                  {hasValidId && onDelete && (
+                    <button 
+                      onClick={handleDeleteClick}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-red-600 flex items-center gap-2"
+                    >
+                      <Trash size={16} />
+                      Delete
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -192,9 +224,26 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (onDelete) {
-                    onDelete(id);
+                  // Make sure we have a valid ID before proceeding with deletion
+                  if (!hasValidId || !id) {
+                    console.error('Cannot delete assignment: Valid ID is required');
+                    setShowDeleteConfirmation(false);
+                    return;
                   }
+                  
+                  // Execute the delete operation with the API
+                  try {
+                    const numericId = extractNumericId();
+                    console.log(`Deleting assignment with ID: ${id}, extracted ID: ${numericId}`);
+                    
+                    if (onDelete) {
+                      // Only proceed if we have a valid ID and a delete handler
+                      onDelete(id);
+                    }
+                  } catch (error) {
+                    console.error('Error when attempting to delete assignment:', error);
+                  }
+                  
                   setShowDeleteConfirmation(false);
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"

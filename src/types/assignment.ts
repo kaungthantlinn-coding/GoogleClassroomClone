@@ -1,4 +1,5 @@
 import { User } from './user';
+import * as assignmentApi from '../api/assignmentApi';
 
 export type AssignmentStatus = 'due-soon' | 'completed' | 'missing' | 'upcoming';
 
@@ -33,76 +34,91 @@ export interface Assignment {
   color?: string;
 }
 
-// Local storage key for assignments
-const ASSIGNMENTS_STORAGE_KEY = 'classroom_assignments';
-
-// Get all assignments from localStorage
-export const getAllAssignments = (): Assignment[] => {
+// Get all assignments - this method is not used with real API
+export const getAllAssignments = async (): Promise<Assignment[]> => {
   try {
-    const storedAssignments = localStorage.getItem(ASSIGNMENTS_STORAGE_KEY);
-    return storedAssignments ? JSON.parse(storedAssignments) : [];
+    // Not directly supported in API, consider using a different approach
+    console.warn('getAllAssignments is not directly supported with the API implementation');
+    return [];
   } catch (error) {
-    console.error('Error getting assignments from localStorage', error);
+    console.error('Error getting all assignments', error);
     return [];
   }
 };
 
 // Get assignments for a specific class
-export const getClassAssignments = (classId: string): Assignment[] => {
-  const allAssignments = getAllAssignments();
-  return allAssignments.filter(assignment => assignment.classId === classId);
-};
-
-// Save an assignment to localStorage
-export const saveAssignment = (assignment: Assignment): Assignment => {
+export const getClassAssignments = async (classId: string): Promise<Assignment[]> => {
   try {
-    const assignments = getAllAssignments();
-    const existingIndex = assignments.findIndex(a => a.id === assignment.id);
-    
-    if (existingIndex >= 0) {
-      // Update existing assignment
-      assignments[existingIndex] = {
-        ...assignments[existingIndex],
-        ...assignment,
-        updatedAt: new Date().toISOString()
-      };
-    } else {
-      // Add new assignment
-      assignments.push({
-        ...assignment,
-        createdAt: new Date().toISOString()
-      });
-    }
-    
-    localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(assignments));
-    
-    // Also save individual assignment data for quick access
-    const assignmentKey = `assignment-${assignment.id}`;
-    localStorage.setItem(assignmentKey, JSON.stringify(assignment));
-    
-    // Dispatch event to notify other components
-    const assignmentEvent = new CustomEvent('assignmentUpdated', {
-      detail: { assignmentId: assignment.id, assignmentData: assignment }
-    });
-    window.dispatchEvent(assignmentEvent);
-    
-    return assignment;
+    return await assignmentApi.getAssignments(classId);
   } catch (error) {
-    console.error('Error saving assignment to localStorage', error);
-    return assignment;
+    console.error(`Error getting assignments for class ${classId}:`, error);
+    return [];
   }
 };
 
-// Delete an assignment from localStorage
-export const deleteAssignment = (assignmentId: string): boolean => {
+// Save an assignment
+export const saveAssignment = async (assignment: Partial<Assignment>): Promise<Assignment> => {
   try {
-    const assignments = getAllAssignments();
-    const filteredAssignments = assignments.filter(a => a.id !== assignmentId);
+    const classId = assignment.classId || '';
+    let savedAssignment: Assignment;
     
-    localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(filteredAssignments));
+    if (assignment.id) {
+      // Update existing assignment
+      savedAssignment = await assignmentApi.updateAssignment(assignment.id, assignment);
+    } else {
+      // Create new assignment
+      savedAssignment = await assignmentApi.createAssignment(classId, assignment);
+      
+      // Ensure we have a valid ID from the API
+      if (!savedAssignment.id) {
+        console.error('API Error: Assignment was created but no ID was returned');
+        throw new Error('Assignment created without an ID');
+      }
+      
+      console.log(`Assignment created successfully with ID: ${savedAssignment.id}`);
+    }
     
-    // Also remove individual assignment data
-    localStorage.removeItem(`assignment-${assignmentId}`);
+    // Dispatch event to notify other components
+    const assignmentEvent = new CustomEvent(assignment.id ? 'assignmentUpdated' : 'newAssignmentCreated', {
+      detail: { assignmentId: savedAssignment.id, assignmentData: savedAssignment }
+    });
+    window.dispatchEvent(assignmentEvent);
+    
+    return savedAssignment;
+  } catch (error) {
+    console.error('Error saving assignment', error);
+    throw error;
+  }
+};
+
+// Delete an assignment
+export const deleteAssignment = async (assignmentId: string): Promise<boolean> => {
+  if (!assignmentId) {
+    console.error('Cannot delete assignment: Assignment ID is required');
+    return false;
+  }
+
+  try {
+    console.log(`Attempting to delete assignment with ID: ${assignmentId}`);
+    // The API expects a numeric ID, so make sure we're working with a number
+    // If the ID is not a number (like in a legacy or special format), try to extract a numeric part
+    let numericId: number;
+    
+    if (!isNaN(Number(assignmentId))) {
+      numericId = Number(assignmentId);
+    } else {
+      // For special format like "assignment-123", try to extract the numeric part
+      const match = assignmentId.match(/\d+/);
+      if (match) {
+        numericId = Number(match[0]);
+      } else {
+        console.error(`Cannot delete assignment: ID format "${assignmentId}" is not supported by the API`);
+        return false;
+      }
+    }
+    
+    // Call the API with the numeric ID
+    await assignmentApi.deleteAssignment(numericId);
     
     // Dispatch event to notify other components
     const assignmentEvent = new CustomEvent('assignmentDeleted', {
@@ -112,7 +128,7 @@ export const deleteAssignment = (assignmentId: string): boolean => {
     
     return true;
   } catch (error) {
-    console.error('Error deleting assignment from localStorage', error);
+    console.error(`Error deleting assignment ${assignmentId}:`, error);
     return false;
   }
 };
@@ -149,23 +165,28 @@ export const calculateAssignmentStatus = (assignment: Assignment): AssignmentSta
 };
 
 // Get upcoming assignments for a class
-export const getUpcomingAssignments = (classId: string): Assignment[] => {
-  const assignments = getClassAssignments(classId);
-  
-  // Add status to each assignment
-  const assignmentsWithStatus = assignments.map(assignment => ({
-    ...assignment,
-    status: calculateAssignmentStatus(assignment)
-  }));
-  
-  // Sort by due date (closest first)
-  return assignmentsWithStatus.sort((a, b) => {
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
+export const getUpcomingAssignments = async (classId: string): Promise<Assignment[]> => {
+  try {
+    const assignments = await getClassAssignments(classId);
     
-    const dateA = new Date(`${a.dueDate} ${a.dueTime || '23:59'}`);
-    const dateB = new Date(`${b.dueDate} ${b.dueTime || '23:59'}`);
+    // Add status to each assignment
+    const assignmentsWithStatus = assignments.map(assignment => ({
+      ...assignment,
+      status: calculateAssignmentStatus(assignment)
+    }));
     
-    return dateA.getTime() - dateB.getTime();
-  });
+    // Sort by due date (closest first)
+    return assignmentsWithStatus.sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      
+      const dateA = new Date(`${a.dueDate} ${a.dueTime || '23:59'}`);
+      const dateB = new Date(`${b.dueDate} ${b.dueTime || '23:59'}`);
+      
+      return dateA.getTime() - dateB.getTime();
+    });
+  } catch (error) {
+    console.error(`Error getting upcoming assignments for class ${classId}:`, error);
+    return [];
+  }
 };

@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { AxiosInstance } from 'axios';
+import { getApiBaseUrl } from '../utils/apiMode';
 
-const API_URL = 'http://localhost:5203/api';
+const API_URL = getApiBaseUrl();
 
 // Create axios instance for storage
 const storageApi: AxiosInstance = axios.create({
@@ -103,104 +104,22 @@ export const getAnnouncements = async (classId: string | number): Promise<any[]>
   }
 };
 
-// Assignments
-export const getAssignments = async (classId: string | number): Promise<any[]> => {
+// User preferences/settings
+export const getUserPreferences = async (): Promise<any> => {
   try {
-    const response = await storageApi.get(`/courses/${classId}/assignments`);
+    const response = await storageApi.get('/user/preferences');
     return response.data;
   } catch (error) {
-    console.error(`Failed to get assignments for class ${classId}:`, error);
-    return [];
-  }
-};
-
-export const saveAssignment = async (classId: string | number, assignment: any): Promise<any> => {
-  try {
-    if (assignment.id) {
-      // Update existing assignment
-      const response = await storageApi.put(`/assignments/${assignment.id}`, assignment);
-      return response.data;
-    } else {
-      // Create new assignment
-      const response = await storageApi.post(`/courses/${classId}/assignments`, assignment);
-      return response.data;
-    }
-  } catch (error) {
-    console.error(`Failed to save assignment:`, error);
+    console.error('Failed to get user preferences:', error);
     throw error;
   }
 };
 
-export const deleteAssignment = async (assignmentId: string | number): Promise<void> => {
+export const saveUserPreferences = async (preferences: any): Promise<void> => {
   try {
-    await storageApi.delete(`/assignments/${assignmentId}`);
+    await storageApi.post('/user/preferences', preferences);
   } catch (error) {
-    console.error(`Failed to delete assignment ${assignmentId}:`, error);
-    throw error;
-  }
-};
-
-// Materials
-export const getMaterials = async (classId: string | number): Promise<any[]> => {
-  try {
-    const response = await storageApi.get(`/courses/${classId}/materials`);
-    return response.data;
-  } catch (error) {
-    console.error(`Failed to get materials for class ${classId}:`, error);
-    return [];
-  }
-};
-
-export const saveMaterial = async (classId: string | number, material: any): Promise<any> => {
-  try {
-    if (material.id) {
-      // Update existing material
-      const response = await storageApi.put(`/materials/${material.id}`, material);
-      return response.data;
-    } else {
-      // Create new material
-      const response = await storageApi.post(`/courses/${classId}/materials`, material);
-      return response.data;
-    }
-  } catch (error) {
-    console.error(`Failed to save material:`, error);
-    throw error;
-  }
-};
-
-export const deleteMaterial = async (materialId: string | number): Promise<void> => {
-  try {
-    await storageApi.delete(`/materials/${materialId}`);
-  } catch (error) {
-    console.error(`Failed to delete material ${materialId}:`, error);
-    throw error;
-  }
-};
-
-// Submissions
-export const getSubmissions = async (assignmentId: string | number): Promise<any[]> => {
-  try {
-    const response = await storageApi.get(`/assignments/${assignmentId}/submissions`);
-    return response.data;
-  } catch (error) {
-    console.error(`Failed to get submissions for assignment ${assignmentId}:`, error);
-    return [];
-  }
-};
-
-export const saveSubmission = async (assignmentId: string | number, submission: any): Promise<any> => {
-  try {
-    if (submission.id) {
-      // Update existing submission
-      const response = await storageApi.put(`/submissions/${submission.id}`, submission);
-      return response.data;
-    } else {
-      // Create new submission
-      const response = await storageApi.post(`/assignments/${assignmentId}/submissions`, submission);
-      return response.data;
-    }
-  } catch (error) {
-    console.error(`Failed to save submission:`, error);
+    console.error('Failed to save user preferences:', error);
     throw error;
   }
 };
@@ -245,61 +164,9 @@ export const updateCourseTheme = async (courseId: string | number, themeData: an
     const response = await storageApi.put('/courses/theme', themeUpdateData);
     console.log('Course theme update response:', response.data);
     
-    // After a successful theme update, save the theme data to localStorage as a fallback
-    // This ensures it can be retrieved even if the API cache isn't updated properly
-    try {
-      // Create a theme cache to store themes by courseId
-      let themeCache = JSON.parse(localStorage.getItem('themeCache') || '{}');
-      
-      // Update the cache with the new theme
-      themeCache[courseIdStr] = {
-        color: colorValue,
-        coverImage: themeData.coverImage,
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Save the updated cache back to localStorage
-      localStorage.setItem('themeCache', JSON.stringify(themeCache));
-      console.log(`Saved theme for course ${courseIdStr} to local cache`);
-      
-      // Dispatch a global event that can be listened to by any component
-      window.dispatchEvent(new CustomEvent('themeUpdated', { 
-        detail: { 
-          courseId: courseIdStr, 
-          theme: {
-            color: colorValue,
-            coverImage: themeData.coverImage
-          } 
-        } 
-      }));
-    } catch (cacheError) {
-      console.error('Failed to update theme cache:', cacheError);
-      // Continue anyway since the theme update itself succeeded
-    }
-    
     return response.data;
   } catch (error) {
     console.error(`Failed to update course theme for ${courseId}:`, error);
-    throw error;
-  }
-};
-
-// User preferences/settings
-export const getUserPreferences = async (): Promise<any> => {
-  try {
-    const response = await storageApi.get('/user/preferences');
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get user preferences:', error);
-    return {};
-  }
-};
-
-export const saveUserPreferences = async (preferences: any): Promise<void> => {
-  try {
-    await storageApi.post('/user/preferences', preferences);
-  } catch (error) {
-    console.error('Failed to save user preferences:', error);
     throw error;
   }
 };

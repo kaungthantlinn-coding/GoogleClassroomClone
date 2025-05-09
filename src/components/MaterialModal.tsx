@@ -140,7 +140,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
     setScheduledFor(null);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const materialData: MaterialData = {
       title,
       description,
@@ -158,51 +158,48 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
       localStorage.setItem('scheduledPostDate', scheduledFor);
     }
 
-    // If we're editing an existing material, include the ID
-    if (materialToEdit) {
-      // Create updated material object with the existing ID
-      const updatedMaterial: Material = {
-        ...materialData,
-        id: materialToEdit.id,
-        classId: classId || '',
-        className: className,
-        section: (materialToEdit as any).section || '',
-        createdAt: (materialToEdit as any).createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+    try {
+      // If we're editing an existing material, include the ID
+      if (materialToEdit) {
+        // Create updated material object with the existing ID
+        const updatedMaterial: Material = {
+          ...materialData,
+          id: materialToEdit.id,
+          classId: classId || '',
+          className: className,
+          section: (materialToEdit as any).section || '',
+          createdAt: (materialToEdit as any).createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Save the updated material
+        await saveMaterial(updatedMaterial);
+        
+        // Notify parent component
+        onSubmit(materialData, materialToEdit.id);
+      } else {
+        // Create a new material - let the API generate the ID
+        const newMaterial: Partial<Material> = {
+          ...materialData,
+          classId: classId || '',
+          className: className,
+          section: '',
+          createdAt: new Date().toISOString(),
+        };
+        
+        // Save the material
+        const savedMaterial = await saveMaterial(newMaterial);
+        
+        // Notify parent component
+        onSubmit(materialData, savedMaterial.id);
+      }
       
-      // Save the updated material
-      saveMaterial(updatedMaterial);
-      
-      // Notify parent component
-      onSubmit(materialData, materialToEdit.id);
-    } else {
-      // Create a new material
-      const newMaterial: Material = {
-        ...materialData,
-        id: `material-${Date.now()}`,
-        classId: classId || '',
-        className: className,
-        section: '',
-        createdAt: new Date().toISOString(),
-      };
-      
-      // Save the material
-      saveMaterial(newMaterial);
-      
-      // Notify parent component
-      onSubmit(materialData);
-      
-      // Dispatch event to notify other components
-      const materialEvent = new CustomEvent('newMaterialCreated', {
-        detail: { materialId: newMaterial.id, materialData: newMaterial }
-      });
-      window.dispatchEvent(materialEvent);
+      resetForm();
+      onClose();
+    } catch (error) {
+      console.error('Error saving material:', error);
+      // You could add error handling UI here
     }
-
-    // Reset form and close modal
-    resetForm();
-    onClose();
   };
 
   const handleAddAttachment = (type: Attachment['type']) => {

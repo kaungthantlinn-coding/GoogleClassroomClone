@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, Users, Calendar, Clock, Upload, Link as LinkIcon, AlertCircle, Paperclip, Plus, FileText, Check } from 'lucide-react';
 import { Assignment, saveAssignment } from '../types/assignment';
 import { useParams } from 'react-router-dom';
+import * as storageApi from '../api/storageApi';
 
 interface AssignmentModalProps {
   isOpen: boolean;
@@ -102,37 +103,92 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
         setShowSchedulingOptions(true);
       }
     } else if (isOpen && !assignmentToEdit) {
-      // Load saved values from localStorage when opening a new assignment form
-      const savedTopic = localStorage.getItem('lastSelectedTopic');
-      const savedScheduledDate = localStorage.getItem('scheduledPostDate');
-      const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
-      const savedLateSubmissionPolicy = localStorage.getItem('lateSubmissionPolicy');
-      const savedTopicsList = localStorage.getItem('topicsList');
-      
-      // Initialize form with saved values if they exist
-      if (savedTopic) setTopic(savedTopic);
-      if (savedScheduledDate) {
-        setScheduledFor(savedScheduledDate);
-        setShowSchedulingOptions(true); // Show advanced options if there's a scheduled date
-      }
-      if (savedAllowLateSubmissions) {
-        setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
-        setShowSchedulingOptions(true); // Show advanced options if there are late submission settings
-      }
-      if (savedLateSubmissionPolicy) {
-        setLateSubmissionPolicy(savedLateSubmissionPolicy);
-      }
-      if (savedTopicsList) {
+      // Load saved values from API when opening a new assignment form
+      const loadPreferences = async () => {
         try {
-          const parsedTopics = JSON.parse(savedTopicsList);
-          if (Array.isArray(parsedTopics) && parsedTopics.length > 0) {
-            // Update topics state with saved topics using the setter function
-            setTopics(parsedTopics);
+          const preferences = await storageApi.getUserPreferences();
+          if (preferences) {
+            // Initialize form with saved values if they exist
+            if (preferences.lastSelectedTopic) {
+              setTopic(preferences.lastSelectedTopic);
+            }
+            
+            if (preferences.scheduledPostDate) {
+              setScheduledFor(preferences.scheduledPostDate);
+              setShowSchedulingOptions(true); // Show advanced options if there's a scheduled date
+            }
+            
+            if (preferences.allowLateSubmissions !== undefined) {
+              setAllowLateSubmissions(
+                typeof preferences.allowLateSubmissions === 'string' 
+                  ? preferences.allowLateSubmissions === 'true'
+                  : preferences.allowLateSubmissions
+              );
+              setShowSchedulingOptions(true); // Show advanced options if there are late submission settings
+            }
+            
+            if (preferences.lateSubmissionPolicy) {
+              setLateSubmissionPolicy(preferences.lateSubmissionPolicy);
+            }
+            
+            if (preferences.topicsList) {
+              try {
+                const parsedTopics = 
+                  typeof preferences.topicsList === 'string'
+                    ? JSON.parse(preferences.topicsList)
+                    : preferences.topicsList;
+                    
+                if (Array.isArray(parsedTopics) && parsedTopics.length > 0) {
+                  // Update topics state with saved topics
+                  setTopics(parsedTopics);
+                }
+              } catch (e) {
+                console.error('Error parsing saved topics list', e);
+              }
+            }
           }
-        } catch (e) {
-          console.error('Error parsing saved topics list', e);
+        } catch (error) {
+          console.error('Error loading preferences from API:', error);
+          
+          // Fallback to localStorage if API fails
+          try {
+            // Load saved values from localStorage
+            const savedTopic = localStorage.getItem('lastSelectedTopic');
+            const savedScheduledDate = localStorage.getItem('scheduledPostDate');
+            const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
+            const savedLateSubmissionPolicy = localStorage.getItem('lateSubmissionPolicy');
+            const savedTopicsList = localStorage.getItem('topicsList');
+            
+            // Initialize form with saved values if they exist
+            if (savedTopic) setTopic(savedTopic);
+            if (savedScheduledDate) {
+              setScheduledFor(savedScheduledDate);
+              setShowSchedulingOptions(true);
+            }
+            if (savedAllowLateSubmissions) {
+              setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+              setShowSchedulingOptions(true);
+            }
+            if (savedLateSubmissionPolicy) {
+              setLateSubmissionPolicy(savedLateSubmissionPolicy);
+            }
+            if (savedTopicsList) {
+              try {
+                const parsedTopics = JSON.parse(savedTopicsList);
+                if (Array.isArray(parsedTopics) && parsedTopics.length > 0) {
+                  setTopics(parsedTopics);
+                }
+              } catch (e) {
+                console.error('Error parsing saved topics list', e);
+              }
+            }
+          } catch (localStorageError) {
+            console.error('Error loading from localStorage fallback:', localStorageError);
+          }
         }
-      }
+      };
+      
+      loadPreferences();
       
       // Reset other form fields
       resetForm();
@@ -171,7 +227,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     return dueDate ? dueDate : 'No due date';
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const assignmentData: AssignmentData = {
       title,
       instructions,
@@ -186,78 +242,106 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       lateSubmissionPolicy
     };
 
-    if (assignmentToEdit) {
-      // Create updated assignment object with the existing ID
-      const updatedData: Assignment = {
-        ...assignmentData,
-        id: assignmentToEdit.id,
-        updatedAt: new Date().toISOString(),
-        className: className,
-        section: document.title.includes('-') ? document.title.split('-')[1].trim() : '',
-        classId: classId || '',
-        createdAt: (assignmentToEdit as any).createdAt || new Date().toISOString()
-      };
+    try {
+      if (assignmentToEdit) {
+        // Create updated assignment object with the existing ID
+        const updatedData: Assignment = {
+          ...assignmentData,
+          id: assignmentToEdit.id,
+          updatedAt: new Date().toISOString(),
+          className: className,
+          section: document.title.includes('-') ? document.title.split('-')[1].trim() : '',
+          classId: classId || '',
+          createdAt: (assignmentToEdit as any).createdAt || new Date().toISOString()
+        };
+        
+        // Save the updated assignment using our API utility function
+        await saveAssignment(updatedData);
+        
+        onSubmit(assignmentData, assignmentToEdit.id);
+      } else {
+        // Get section from document title if available
+        const section = document.title.includes('-') ? document.title.split('-')[1].trim() : '';
+        
+        // Create a partial assignment object - let API generate the ID
+        const newAssignmentData: Partial<Assignment> = {
+          ...assignmentData,
+          createdAt: new Date().toISOString(),
+          className: className,
+          section: section,
+          classId: classId || ''
+        };
+        
+        // Save the assignment using our API utility function
+        const savedAssignment = await saveAssignment(newAssignmentData);
+        
+        // Use the server-assigned ID
+        onSubmit(assignmentData, savedAssignment.id);
+      }
       
-      // Save the updated assignment using our utility function
-      saveAssignment(updatedData);
-      
-      // Dispatch a custom event to notify other components about the updated assignment
-      const updatedAssignmentEvent = new CustomEvent('assignmentUpdated', {
-        detail: { assignmentId: assignmentToEdit.id, assignmentData: updatedData }
-      });
-      window.dispatchEvent(updatedAssignmentEvent);
-      
-      onSubmit(assignmentData, assignmentToEdit.id);
-    } else {
-      // Generate a new ID for the assignment
-      const newId = `assignment-${Date.now()}`;
-      
-      // Get section from document title if available
-      const section = document.title.includes('-') ? document.title.split('-')[1].trim() : '';
-      
-      // Create a complete assignment object
-      const newAssignmentData: Assignment = {
-        ...assignmentData,
-        id: newId,
-        createdAt: new Date().toISOString(),
-        className: className,
-        section: section,
-        classId: classId || ''
-      };
-      
-      // Save the assignment using our utility function
-      saveAssignment(newAssignmentData);
-      
-      onSubmit(assignmentData, newId);
+      resetForm();
+      onClose();
+    } catch (error) {
+      console.error('Error saving assignment:', error);
+      // You could add error handling UI here
     }
-    
-    resetForm();
-    onClose();
   };
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setTitle('');
     setInstructions('');
     setPoints('100');
     setDueDate('');
     setDueTime('');
     
-    // Preserve topic if it was previously set in localStorage
-    const savedTopic = localStorage.getItem('lastSelectedTopic');
-    setTopic(savedTopic || 'No topic');
+    try {
+      // Load preferences from API
+      const preferences = await storageApi.getUserPreferences();
+      
+      // Preserve topic if available in API
+      if (preferences?.lastSelectedTopic) {
+        setTopic(preferences.lastSelectedTopic);
+      } else {
+        setTopic('No topic');
+      }
+      
+      // Preserve scheduled post date if available in API
+      if (preferences?.scheduledPostDate) {
+        setScheduledFor(preferences.scheduledPostDate);
+      } else {
+        setScheduledFor(null);
+      }
+      
+      // Preserve late submission settings if available in API
+      if (preferences?.allowLateSubmissions !== undefined) {
+        const value = preferences.allowLateSubmissions;
+        setAllowLateSubmissions(
+          typeof value === 'string' ? value === 'true' : value
+        );
+      } else {
+        setAllowLateSubmissions(true);
+      }
+    } catch (error) {
+      console.error('Error loading preferences in resetForm:', error);
+      
+      // Fallback to localStorage if API fails
+      // Preserve topic if it was previously set in localStorage
+      const savedTopic = localStorage.getItem('lastSelectedTopic');
+      setTopic(savedTopic || 'No topic');
+      
+      // Preserve scheduled post date if it was previously set in localStorage
+      const savedScheduledDate = localStorage.getItem('scheduledPostDate');
+      setScheduledFor(savedScheduledDate || null);
+      
+      // Preserve late submission settings if they were previously set in localStorage
+      const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
+      if (savedAllowLateSubmissions) {
+        setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
+      }
+    }
     
     setAttachments([]);
     setAssignTo(['All students']);
-    
-    // Preserve scheduled post date if it was previously set in localStorage
-    const savedScheduledDate = localStorage.getItem('scheduledPostDate');
-    setScheduledFor(savedScheduledDate || null);
-    
-    // Preserve late submission settings if they were previously set in localStorage
-    const savedAllowLateSubmissions = localStorage.getItem('allowLateSubmissions');
-    if (savedAllowLateSubmissions) {
-      setAllowLateSubmissions(savedAllowLateSubmissions === 'true');
-    }
   };
 
   const handleFileUpload = () => {
@@ -322,6 +406,26 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
     const newAttachments = [...attachments];
     newAttachments.splice(index, 1);
     setAttachments(newAttachments);
+  };
+
+  // Save preference to API 
+  const savePreference = async (key: string, value: any) => {
+    try {
+      // Get current preferences
+      const preferences = await storageApi.getUserPreferences() || {};
+      // Update the specific preference
+      preferences[key] = value;
+      // Save all preferences
+      await storageApi.saveUserPreferences(preferences);
+    } catch (error) {
+      console.error(`Error saving preference ${key}:`, error);
+      // Fallback to localStorage if API fails
+      try {
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      } catch (e) {
+        console.error('Error using localStorage fallback:', e);
+      }
+    }
   };
 
   if (!isOpen) return null;
@@ -613,8 +717,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         onClick={() => {
                           setTopic('No topic');
                           setShowTopicDropdown(false);
-                          // Save to localStorage for persistence
-                          localStorage.setItem('lastSelectedTopic', 'No topic');
+                          // Save to API
+                          savePreference('lastSelectedTopic', 'No topic');
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                       >
@@ -630,8 +734,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                           onClick={() => {
                             setTopic(topicItem);
                             setShowTopicDropdown(false);
-                            // Save to localStorage for persistence
-                            localStorage.setItem('lastSelectedTopic', topicItem);
+                            // Save to API
+                            savePreference('lastSelectedTopic', topicItem);
                           }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                         >
@@ -650,9 +754,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                             // Add to topics list for future selection using the setter function
                             const updatedTopics = [...topics, newTopic];
                             setTopics(updatedTopics);
-                            // Save to localStorage for persistence
-                            localStorage.setItem('lastSelectedTopic', newTopic);
-                            localStorage.setItem('topicsList', JSON.stringify(updatedTopics));
+                            // Save to API
+                            savePreference('topicsList', JSON.stringify(updatedTopics));
                           }
                           setShowTopicDropdown(false);
                         }}
@@ -689,11 +792,11 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         value={scheduledFor || ''}
                         onChange={(e) => {
                           setScheduledFor(e.target.value);
-                          // Save to localStorage for persistence
+                          // Save to API
                           if (e.target.value) {
-                            localStorage.setItem('scheduledPostDate', e.target.value);
+                            savePreference('scheduledPostDate', e.target.value);
                           } else {
-                            localStorage.removeItem('scheduledPostDate');
+                            savePreference('scheduledPostDate', null);
                           }
                         }}
                         className="flex-1 px-3 py-2 text-sm border rounded-l focus:outline-none"
@@ -702,7 +805,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                       <button 
                         onClick={() => {
                           setScheduledFor(null);
-                          localStorage.removeItem('scheduledPostDate');
+                          savePreference('scheduledPostDate', null);
                         }}
                         className="px-3 py-2 bg-[#f8f9fa] border border-l-0 rounded-r text-sm text-[#5f6368] hover:bg-[#f1f3f4]"
                       >
@@ -726,8 +829,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         onChange={(e) => {
                           const isChecked = e.target.checked;
                           setAllowLateSubmissions(isChecked);
-                          // Save to localStorage for persistence
-                          localStorage.setItem('allowLateSubmissions', isChecked.toString());
+                          // Save to API
+                          savePreference('allowLateSubmissions', isChecked.toString());
                         }}
                         className="mr-2"
                         data-testid="late-submissions-checkbox"
@@ -743,9 +846,9 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
                           <select 
                             className="w-full pl-8 pr-3 py-2 text-sm border rounded focus:outline-none appearance-none bg-[#f8f9fa]"
                             onChange={(e) => {
-                              // Update state and save to localStorage
+                              // Update state and save to API
                               setLateSubmissionPolicy(e.target.value);
-                              localStorage.setItem('lateSubmissionPolicy', e.target.value);
+                              savePreference('lateSubmissionPolicy', e.target.value);
                             }}
                             value={lateSubmissionPolicy}
                             data-testid="late-submission-policy"
