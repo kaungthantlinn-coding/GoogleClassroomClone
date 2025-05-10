@@ -13,10 +13,11 @@ import {
   Calendar,
   X,
   Menu,
-  Plus
+  Plus,
+  LogOut
 } from 'lucide-react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { createCourse, getCourses, deleteCourse } from '../api/courseApi';
+import { createCourse, getCourses, deleteCourse, unenrollCourse } from '../api/courseApi';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -73,6 +74,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [teachingClasses, setTeachingClasses] = useState<Class[]>([]);
+  const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newClass, setNewClass] = useState<Partial<Class>>({
     name: '',
@@ -82,6 +84,10 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // Get user role to determine if student or teacher
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+
   // Use React Query to fetch courses
   const { data: courses, isLoading: isLoadingCourses } = useQuery({
     queryKey: ['courses'],
@@ -89,7 +95,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     refetchOnWindowFocus: true,
   });
 
-  // Update teaching classes when courses data changes
+  // Update classes when courses data changes
   useEffect(() => {
     if (courses) {
       console.log("Courses data received:", JSON.stringify(courses, null, 2));
@@ -109,9 +115,17 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         };
       });
       console.log("Formatted courses:", JSON.stringify(formattedCourses, null, 2));
-      setTeachingClasses(formattedCourses);
+      
+      // If user is a student, put courses in enrolledClasses, otherwise in teachingClasses
+      if (isStudent) {
+        setEnrolledClasses(formattedCourses);
+        setTeachingClasses([]); // Clear teaching classes for students
+      } else {
+        setTeachingClasses(formattedCourses);
+        setEnrolledClasses([]); // Clear enrolled classes for teachers
+      }
     }
-  }, [courses]);
+  }, [courses, isStudent]);
 
   // Legacy loadClasses function (now empty, keeping for backward compatibility with event handlers)
   const loadClasses = () => {
@@ -479,136 +493,213 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           ))}
 
           <div className="mt-2">
-            <button
-              onClick={() => !isCollapsed && setIsTeachingOpen(!isTeachingOpen)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
-            >
-              <GraduationCap size={24} strokeWidth={1.5} />
-              {!isCollapsed && (
-                <>
-                  <span className="text-sm flex-1 text-left">Teaching</span>
-                  {isTeachingOpen ? (
-                    <ChevronUp size={20} strokeWidth={1.5} key="teaching-chevron-up" />
-                  ) : (
-                    <ChevronDown size={20} strokeWidth={1.5} key="teaching-chevron-down" />
+            {/* Only show Teaching section if user is a teacher or has teaching classes */}
+            {(!isStudent || teachingClasses.length > 0) && (
+              <>
+                <button
+                  onClick={() => !isCollapsed && setIsTeachingOpen(!isTeachingOpen)}
+                  className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
+                >
+                  <GraduationCap size={24} strokeWidth={1.5} />
+                  {!isCollapsed && (
+                    <>
+                      <span className="text-sm flex-1 text-left">Teaching</span>
+                      {isTeachingOpen ? (
+                        <ChevronUp size={20} strokeWidth={1.5} key="teaching-chevron-up" />
+                      ) : (
+                        <ChevronDown size={20} strokeWidth={1.5} key="teaching-chevron-down" />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </button>
-            {(isCollapsed || isTeachingOpen) && (
-              <div key="teaching-items-container">
-                {teachingItems.map((item) => (
-                  <NavLink
-                    key={`teaching-item-${item.to}`}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
-                        isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
-                      }`
-                    }
-                  >
-                    <item.icon size={24} strokeWidth={1.5} />
-                    {!isCollapsed && <span className="text-sm">{item.label}</span>}
-                  </NavLink>
-                ))}
+                </button>
+                {(isCollapsed || isTeachingOpen) && (
+                  <div key="teaching-items-container">
+                    {teachingItems.map((item) => (
+                      <NavLink
+                        key={`teaching-item-${item.to}`}
+                        to={item.to}
+                        className={({ isActive }) =>
+                          `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
+                            isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
+                          }`
+                        }
+                      >
+                        <item.icon size={24} strokeWidth={1.5} />
+                        {!isCollapsed && <span className="text-sm">{item.label}</span>}
+                      </NavLink>
+                    ))}
 
-                {/* Teaching Classes */}
-                {!isCollapsed && teachingClasses.map((classItem, index) => {
-                  // Generate a unique key for each teaching class item
-                  const uniqueKey = generateUniqueKey('teaching-class', classItem);
-                  return (
-                    <div key={uniqueKey} className="group relative flex items-center">
-                      <Link
-                        to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
-                        state={{
-                          className: classItem.name,
-                          section: classItem.section,
-                          color: classItem.color,
-                          coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
-                        }}
-                        className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
-                      >
-                        <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                          style={{ backgroundColor: getClassColor(classItem) }}
-                        >
-                          {(classItem.name || '?').charAt(0).toUpperCase()}
+                    {/* Teaching Classes */}
+                    {!isCollapsed && teachingClasses.map((classItem, index) => {
+                      // Generate a unique key for each teaching class item
+                      const uniqueKey = generateUniqueKey('teaching-class', classItem);
+                      return (
+                        <div key={uniqueKey} className="group relative flex items-center">
+                          <Link
+                            to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
+                            state={{
+                              className: classItem.name,
+                              section: classItem.section,
+                              color: classItem.color,
+                              coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
+                            }}
+                            className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
+                          >
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                              style={{ backgroundColor: getClassColor(classItem) }}
+                            >
+                              {(classItem.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="overflow-hidden">
+                              <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
+                              <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
+                            </div>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              // Delete the course via API
+                              const courseIdToDelete = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
+                              if (!courseIdToDelete) {
+                                console.error('Cannot delete course - no valid ID found');
+                                return;
+                              }
+                              
+                              deleteCourse(courseIdToDelete)
+                                .then(() => {
+                                  console.log(`Deleted course: ${courseIdToDelete}`);
+                                  // Update local state
+                                  setTeachingClasses(prevClasses => prevClasses.filter(cls => 
+                                    cls.id !== courseIdToDelete && 
+                                    cls.courseId?.toString() !== courseIdToDelete && 
+                                    cls.courseGuid !== courseIdToDelete
+                                  ));
+                                  // Invalidate course queries to refresh data
+                                  queryClient.invalidateQueries({ queryKey: ['courses'] });
+                                })
+                                .catch(error => {
+                                  console.error(`Failed to delete course ${courseIdToDelete}:`, error);
+                                });
+                            }}
+                            className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
+                          >
+                            <X size={16} className="text-gray-500" />
+                          </button>
                         </div>
-                        <div className="overflow-hidden">
-                          <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
-                          <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
-                        </div>
-                      </Link>
-                      <button
-                        onClick={() => {
-                          // Delete the course via API
-                          const courseIdToDelete = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
-                          if (!courseIdToDelete) {
-                            console.error('Cannot delete course - no valid ID found');
-                            return;
-                          }
-                          
-                          deleteCourse(courseIdToDelete)
-                            .then(() => {
-                              console.log(`Deleted course: ${courseIdToDelete}`);
-                              // Update local state
-                              setTeachingClasses(prevClasses => prevClasses.filter(cls => 
-                                cls.id !== courseIdToDelete && 
-                                cls.courseId?.toString() !== courseIdToDelete && 
-                                cls.courseGuid !== courseIdToDelete
-                              ));
-                              // Invalidate course queries to refresh data
-                              queryClient.invalidateQueries({ queryKey: ['courses'] });
-                            })
-                            .catch(error => {
-                              console.error(`Failed to delete course ${courseIdToDelete}:`, error);
-                            });
-                        }}
-                        className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
-                      >
-                        <X size={16} className="text-gray-500" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           <div className="mt-2">
-            <button
-              onClick={() => !isCollapsed && setIsEnrolledOpen(!isEnrolledOpen)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
-            >
-              <BookOpen size={24} strokeWidth={1.5} />
-              {!isCollapsed && (
-                <>
-                  <span className="text-sm flex-1 text-left">Enrolled</span>
-                  {isEnrolledOpen ? (
-                    <ChevronUp size={20} strokeWidth={1.5} key="enrolled-chevron-up" />
-                  ) : (
-                    <ChevronDown size={20} strokeWidth={1.5} key="enrolled-chevron-down" />
+            {/* Only show Enrolled section if user is a student or has enrolled classes */}
+            {(isStudent || enrolledClasses.length > 0) && (
+              <>
+                <button
+                  onClick={() => !isCollapsed && setIsEnrolledOpen(!isEnrolledOpen)}
+                  className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
+                >
+                  <BookOpen size={24} strokeWidth={1.5} />
+                  {!isCollapsed && (
+                    <>
+                      <span className="text-sm flex-1 text-left">Enrolled</span>
+                      {isEnrolledOpen ? (
+                        <ChevronUp size={20} strokeWidth={1.5} key="enrolled-chevron-up" />
+                      ) : (
+                        <ChevronDown size={20} strokeWidth={1.5} key="enrolled-chevron-down" />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </button>
-            {(isCollapsed || isEnrolledOpen) && (
-              <div key="enrolled-items-container">
-                {enrolledItems.map((item) => (
-                  <NavLink
-                    key={`enrolled-item-${item.to}`}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
-                        isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
-                      }`
-                    }
-                  >
-                    <item.icon size={24} strokeWidth={1.5} />
-                    {!isCollapsed && <span className="text-sm">{item.label}</span>}
-                  </NavLink>
-                ))}
-              </div>
+                </button>
+                {(isCollapsed || isEnrolledOpen) && (
+                  <div key="enrolled-items-container">
+                    {enrolledItems.map((item) => (
+                      <NavLink
+                        key={`enrolled-item-${item.to}`}
+                        to={item.to}
+                        className={({ isActive }) =>
+                          `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
+                            isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
+                          }`
+                        }
+                      >
+                        <item.icon size={24} strokeWidth={1.5} />
+                        {!isCollapsed && <span className="text-sm">{item.label}</span>}
+                      </NavLink>
+                    ))}
+
+                    {/* Enrolled Classes */}
+                    {!isCollapsed && enrolledClasses.map((classItem) => {
+                      // Generate a unique key for each enrolled class item
+                      const uniqueKey = generateUniqueKey('enrolled-class', classItem);
+                      return (
+                        <div key={uniqueKey} className="group relative flex items-center">
+                          <Link
+                            to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
+                            state={{
+                              className: classItem.name,
+                              section: classItem.section,
+                              color: classItem.color,
+                              coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
+                            }}
+                            className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
+                          >
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                              style={{ backgroundColor: getClassColor(classItem) }}
+                            >
+                              {(classItem.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="overflow-hidden">
+                              <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
+                              <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
+                            </div>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              // Get the correct course ID
+                              const courseIdToUnenroll = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
+                              if (!courseIdToUnenroll) {
+                                console.error('Cannot unenroll from course - no valid ID found');
+                                return;
+                              }
+                              
+                              // Confirm before unenrolling
+                              if (window.confirm(`Are you sure you want to unenroll from "${classItem.name}"?`)) {
+                                console.log(`Attempting to unenroll from course with ID: ${courseIdToUnenroll}`);
+                                
+                                unenrollCourse(courseIdToUnenroll)
+                                  .then(() => {
+                                    console.log(`Successfully unenrolled from course: ${courseIdToUnenroll}`);
+                                    // Update local state by removing the course
+                                    setEnrolledClasses(prevClasses => prevClasses.filter(cls => 
+                                      cls.id !== courseIdToUnenroll && 
+                                      cls.courseId?.toString() !== courseIdToUnenroll && 
+                                      cls.courseGuid !== courseIdToUnenroll
+                                    ));
+                                    // Invalidate course queries to refresh data
+                                    queryClient.invalidateQueries({ queryKey: ['courses'] });
+                                  })
+                                  .catch(error => {
+                                    console.error(`Failed to unenroll from course ${courseIdToUnenroll}:`, error);
+                                    alert(`Failed to unenroll from class. Error: ${error.message || 'Unknown error'}`);
+                                  });
+                              }
+                            }}
+                            className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
+                            title="Unenroll from class"
+                          >
+                            <LogOut size={16} className="text-gray-500" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 

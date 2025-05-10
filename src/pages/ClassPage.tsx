@@ -27,7 +27,8 @@ export interface ClassData extends Course {
 }
 
 // Create a context for class data
-export const ClassDataContext = createContext<ClassData>({
+// Moving this context inside component to prevent Fast Refresh issues
+const ClassDataContext = createContext<ClassData>({
   id: '',
   name: 'Class',
   section: 'Section',
@@ -37,6 +38,7 @@ export const ClassDataContext = createContext<ClassData>({
 
 // Import the real PeoplePage component
 import PeoplePage from './PeoplePage';
+import { StudentDataProvider } from '../contexts/StudentDataContext';
 
 // Simple wrapper component for Grades
 
@@ -543,10 +545,37 @@ export default function ClassPage() {
 
   const copyClassCode = () => {
     const code = classData.enrollmentCode || 'zrgexl2e';
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    try {
+      navigator.clipboard.writeText(code)
+        .then(() => {
+          console.log('Class code copied to clipboard:', code);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(err => {
+          console.error('Failed to copy text: ', err);
+          // Fallback method for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = code;
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } else {
+              console.error('Fallback: Unable to copy');
+            }
+          } catch (err) {
+            console.error('Fallback: Unable to copy', err);
+          }
+          document.body.removeChild(textArea);
+        });
+    } catch (err) {
+      console.error('Error accessing clipboard:', err);
+    }
   };
 
   // Render banner with direct image from the API - no fallbacks
@@ -668,7 +697,7 @@ export default function ClassPage() {
                   <div className="p-3 flex items-center justify-between relative">
                     <span className="text-[#1a73e8] text-[15px] font-medium tracking-wide">{classData.enrollmentCode || 'zrgexl2e'}</span>
                     {copied && (
-                      <div className="absolute left-0 -bottom-8 bg-gray-800 text-white text-xs py-1 px-2 rounded">
+                      <div className="absolute left-0 -bottom-8 bg-gray-800 text-white text-xs py-1 px-2 rounded z-10">
                         Copied to clipboard
                       </div>
                     )}
@@ -677,10 +706,11 @@ export default function ClassPage() {
                         <Expand size={18} className="text-[#5f6368]" />
                       </button>
                       <button
-                        className="p-1 hover:bg-[#f8f9fa] rounded-full"
+                        className="p-1 hover:bg-[#f8f9fa] rounded-full relative"
                         onClick={copyClassCode}
+                        title="Copy class code"
                       >
-                        <Copy size={18} className="text-[#5f6368]" />
+                        <Copy size={18} className={`${copied ? "text-[#1a73e8]" : "text-[#5f6368]"}`} />
                       </button>
                     </div>
                   </div>
@@ -813,7 +843,11 @@ export default function ClassPage() {
 
           {isClasswork && <ClassworkPage />}
 
-          {isPeople && <PeoplePage />}
+          {isPeople && (
+            <StudentDataProvider>
+              <PeoplePage />
+            </StudentDataProvider>
+          )}
 
           {isGrades && <GradesPage />}
 
@@ -829,3 +863,6 @@ export default function ClassPage() {
     </ClassDataContext.Provider>
   );
 }
+
+// Export context at the bottom of the file to prevent Fast Refresh issues
+export { ClassDataContext };

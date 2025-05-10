@@ -50,103 +50,18 @@ interface StudentDataProviderProps {
 }
 
 export const StudentDataProvider: React.FC<StudentDataProviderProps> = ({ children }) => {
-  // Initialize students from localStorage or with default data
-  const [students, setStudents] = useState<Student[]>(() => {
-    const savedStudents = localStorage.getItem('students');
-    if (savedStudents) {
-      try {
-        return JSON.parse(savedStudents);
-      } catch (e) {
-        console.error('Error parsing saved students', e);
-      }
-    }
-    
-    // Default students if none in localStorage
-    return [
-      {
-        id: '1001',
-        name: 'Alice Smith',
-        email: 'alice.smith@example.com',
-        assignmentAvg: '91.3%',
-        participation: '95%',
-        finalGrade: '92%',
-        finalGradeColor: 'text-green-600'
-      },
-      {
-        id: '1002',
-        name: 'Bob Johnson',
-        email: 'bob.johnson@example.com',
-        assignmentAvg: '83.3%',
-        participation: '90%',
-        finalGrade: '84%',
-        finalGradeColor: 'text-blue-600'
-      },
-      {
-        id: '1003',
-        name: 'Charlie Davis',
-        email: 'charlie.davis@example.com',
-        assignmentAvg: '78.8%',
-        participation: '85%',
-        finalGrade: '80%',
-        finalGradeColor: 'text-blue-600'
-      },
-      {
-        id: '1004',
-        name: 'Diana Wilson',
-        email: 'diana.wilson@example.com',
-        assignmentAvg: '0%',
-        participation: '0%',
-        finalGrade: '0%',
-        finalGradeColor: 'text-red-600'
-      }
-    ];
-  });
+  // Clear localStorage on first load to remove default data
+  useEffect(() => {
+    localStorage.removeItem('students');
+    localStorage.removeItem('submissions');
+    localStorage.removeItem('gradedSubmission');
+  }, []);
 
-  // Initialize submissions from localStorage or with default data
-  const [submissions, setSubmissions] = useState<Submission[]>(() => {
-    const savedSubmissions = localStorage.getItem('submissions');
-    if (savedSubmissions) {
-      try {
-        return JSON.parse(savedSubmissions);
-      } catch (e) {
-        console.error('Error parsing saved submissions', e);
-      }
-    }
-    
-    // Default submissions if none in localStorage
-    return [
-      {
-        id: 'sub-1001',
-        studentName: 'Alice Smith',
-        studentId: '1001',
-        status: 'submitted',
-        submittedDate: 'June 12th, 2023 10:00 PM'
-      },
-      {
-        id: 'sub-1002',
-        studentName: 'Bob Johnson',
-        studentId: '1002',
-        status: 'late',
-        submittedDate: 'June 17th, 2023 09:30 PM'
-      },
-      {
-        id: 'sub-1003',
-        studentName: 'Charlie Davis',
-        studentId: '1003',
-        status: 'graded',
-        submittedDate: 'June 10th, 2023 08:15 PM',
-        grade: 100,
-        letterGrade: 'A',
-        gradePercentage: 100
-      },
-      {
-        id: 'sub-1004',
-        studentName: 'Diana Wilson',
-        studentId: '1004',
-        status: 'missing'
-      }
-    ];
-  });
+  // Initialize students with empty array
+  const [students, setStudents] = useState<Student[]>([]);
+
+  // Initialize submissions with empty array  
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
 
   // Save students to localStorage whenever they change
   useEffect(() => {

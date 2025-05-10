@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Course } from '../types/course';
 import { Link } from 'react-router-dom';
-import { Users, Folder, Trash2, Edit } from 'lucide-react';
-import { deleteCourse, getCourses, updateCourse } from '../api/courseApi';
+import { Users, Folder, Trash2, Edit, Plus, MoreVertical, LogOut } from 'lucide-react';
+import { deleteCourse, getCourses, updateCourse, enrollCourse, enrollCourseByCode, unenrollCourse } from '../api/courseApi';
 import axios from 'axios';
 import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
 
@@ -99,6 +99,27 @@ export default function HomePage() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseImages, setCourseImages] = useState<{[key: string]: string}>({});
   
+  // For student enrollment
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [enrollmentCode, setEnrollmentCode] = useState('');
+  const [enrollmentError, setEnrollmentError] = useState('');
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+  
+  // For student unenrollment
+  const [showUnenrollModal, setShowUnenrollModal] = useState(false);
+  const [unenrollCourseId, setUnenrollCourseId] = useState<string>('');
+  const [unenrollCourseName, setUnenrollCourseName] = useState<string>('');
+  const [unenrollLoading, setUnenrollLoading] = useState(false);
+  const [unenrollError, setUnenrollError] = useState('');
+  
+  // For dropdown menu
+  const [openMenuCourseId, setOpenMenuCourseId] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Get user role
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+
   // Convert imported classroom image to data URL on component mount
   useEffect(() => {
     // We can use the imported classroomImage directly for React components
@@ -269,10 +290,12 @@ export default function HomePage() {
       try {
         // Fetch courses from the API
         const coursesData = await getCourses();
+        
         return coursesData;
       } catch (error) {
         console.error('Error fetching courses:', error);
-        throw error; // Make sure to throw the error so React Query can handle it
+        
+        throw error; // For teachers, still throw the error
       }
     },
   });
@@ -342,6 +365,97 @@ export default function HomePage() {
       });
     }
   }, [courses, courseImages]);
+
+  // Function to handle course enrollment for students
+  const handleEnrollCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!enrollmentCode.trim()) {
+      setEnrollmentError('Please enter an enrollment code');
+      return;
+    }
+    
+    setEnrollmentLoading(true);
+    setEnrollmentError('');
+    
+    try {
+      // Call the API to enroll in a course
+      await enrollCourseByCode(enrollmentCode.trim());
+      
+      // Refresh the courses list
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      
+      // Close the modal and reset form
+      setShowEnrollModal(false);
+      setEnrollmentCode('');
+      
+      // Show success message
+      alert('Successfully enrolled in the course!');
+    } catch (error) {
+      console.error('Error enrolling in course:', error);
+      setEnrollmentError(
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to enroll in the course. Please check the code and try again.'
+      );
+    } finally {
+      setEnrollmentLoading(false);
+    }
+  };
+
+  // Handle clicks outside the dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenMenuCourseId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Function to handle unenrolling from a course
+  const handleUnenrollCourse = async () => {
+    if (!unenrollCourseId) {
+      console.error('No course ID provided for unenrollment');
+      setUnenrollError('Course ID is missing. Please try again.');
+      return;
+    }
+    
+    console.log(`Starting unenroll process for course: ${unenrollCourseId} (${unenrollCourseName})`);
+    
+    setUnenrollLoading(true);
+    setUnenrollError('');
+    
+    try {
+      // Call the API to unenroll from a course
+      await unenrollCourse(unenrollCourseId);
+      
+      // Refresh the courses list
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      
+      // Close the modal and reset form
+      setShowUnenrollModal(false);
+      setUnenrollCourseId('');
+      setUnenrollCourseName('');
+      
+      // Show success message
+      alert('Successfully unenrolled from the course!');
+    } catch (error) {
+      console.error('Error unenrolling from course:', error);
+      setUnenrollError(
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to unenroll from the course. Please try again later.'
+      );
+      // Keep the modal open so the user can see the error
+    } finally {
+      setUnenrollLoading(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading courses...</div>;
@@ -573,89 +687,358 @@ export default function HomePage() {
         </div>
       )}
       
+      {/* Enrollment Modal for Students */}
+      {showEnrollModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" 
+          style={{position: 'fixed', zIndex: 9999, top: 0, left: 0, right: 0, bottom: 0}}
+          onClick={() => setShowEnrollModal(false)}
+          key="enroll-modal"
+        >
+          <div
+            className="bg-white w-full max-w-[450px] rounded-lg shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-[22px] font-normal text-[#3c4043]">Join a class</h2>
+              <div className="text-sm text-blue-600">Student View</div>
+            </div>
+            <form onSubmit={handleEnrollCourse} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Class code
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollmentCode}
+                    onChange={(e) => setEnrollmentCode(e.target.value)}
+                    placeholder="Enter class code"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8]"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ask your teacher for the class code, then enter it here
+                  </p>
+                  {enrollmentError && (
+                    <p className="text-sm text-red-600 mt-2 p-2 bg-red-50 rounded">
+                      {enrollmentError}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="mt-4 text-sm text-gray-600 bg-blue-50 p-3 rounded">
+                  <p className="font-medium mb-1">How to join a class?</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Use a class code from your teacher</li>
+                    <li>Enter the code in the field above</li>
+                    <li>Click "Join" to access your class</li>
+                  </ol>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEnrollModal(false)}
+                  className="px-6 py-2 text-[#1a73e8] hover:bg-[#f6fafe] rounded-md font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={enrollmentLoading || !enrollmentCode.trim()}
+                  className="px-6 py-2 bg-[#1a73e8] text-white rounded-md font-medium hover:bg-[#1557b0] disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {enrollmentLoading ? 'Joining...' : 'Join'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Unenroll Confirmation Modal */}
+      {showUnenrollModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" 
+          style={{position: 'fixed', zIndex: 9999, top: 0, left: 0, right: 0, bottom: 0}}
+          onClick={() => setShowUnenrollModal(false)}
+          key="unenroll-modal"
+        >
+          <div
+            className="bg-white w-full max-w-[450px] rounded-lg shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-[22px] font-normal text-[#3c4043]">Unenroll from class</h2>
+              <div className="text-sm text-red-600">Student View</div>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <p className="text-gray-700">
+                  Are you sure you want to unenroll from <span className="font-semibold">{unenrollCourseName}</span>?
+                </p>
+                <div className="bg-yellow-50 text-yellow-800 p-3 rounded-md text-sm">
+                  <p className="font-medium">Warning:</p>
+                  <ul className="list-disc list-inside mt-1">
+                    <li>You will lose access to all class materials</li>
+                    <li>Your submissions will remain but won't be accessible</li>
+                    <li>You'll need a new class code to rejoin</li>
+                  </ul>
+                </div>
+                
+                {unenrollError && (
+                  <p className="text-sm text-red-600 p-2 bg-red-50 rounded">
+                    {unenrollError}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowUnenrollModal(false)}
+                  className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-md font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    console.log('Unenroll button clicked');
+                    handleUnenrollCourse();
+                  }}
+                  disabled={unenrollLoading}
+                  className="px-6 py-2 bg-red-600 text-white rounded-md font-medium hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  type="button"
+                >
+                  {unenrollLoading ? 'Unenrolling...' : 'Unenroll'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="p-6 bg-gray-50 min-h-screen">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-4" key="controls-container">
-            <button
-              key="clear-classes-button"
-              onClick={clearCreatedClasses}
-              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
-              title="Clear all created classes"
-            >
-              <Trash2 size={16} />
-              <span>Clear created classes</span>
-            </button>
-          </div>
+          {/* Only show clear classes button for teachers */}
+          {!isStudent && (
+            <div className="flex gap-4" key="controls-container">
+              <button
+                key="clear-classes-button"
+                onClick={clearCreatedClasses}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
+                title="Clear all created classes"
+              >
+                <Trash2 size={16} />
+                <span>Clear created classes</span>
+              </button>
+            </div>
+          )}
+          
+          {/* Show join class button for students */}
+          {isStudent && (
+            <div className="flex gap-4" key="student-controls">
+              <button
+                key="join-class-button"
+                onClick={() => setShowEnrollModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+                title="Join a class"
+              >
+                <Plus size={16} />
+                <span>Join class</span>
+              </button>
+            </div>
+          )}
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" key="courses-grid">
-          {courses?.map((course) => {
-            // Generate a truly unique key for this course
-            const courseKey = generateUniqueKey('course', course);
-            return (
-              <div
-                key={courseKey}
-                className="rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200/80"
-                style={{ maxWidth: '300px' }}
-              >
-                <div className="relative" key={`content-${courseKey}`}>
-                  <Link
-                    to={`/class/${course.courseId || course.id || course.courseGuid}`}
-                    state={{
-                      className: course.name,
-                      section: course.section,
-                      classCode: course.enrollmentCode,
-                      color: course.color || '#1a73e8',
-                      coverImage: (() => {
-                        // Generate a safe card ID that won't be undefined
-                        const cardId = course.courseId?.toString() || course.id || course.courseGuid || '';
-                        // Check if we have a cached image
-                        if (cardId && courseImages[cardId] && isValidImageUrl(courseImages[cardId])) {
-                          return courseImages[cardId];
-                        }
-                        // Use course cover image if valid
-                        if (isValidImageUrl(course.coverImage)) {
-                          return course.coverImage;
-                        }
-                        // Fallback to default
-                        return FALLBACK_IMAGES.default;
-                      })()
-                    }}
-                    className="block rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300"
-                  >
-                    {renderClassCard(course)}
-                  </Link>
-                  
-                  {/* Quick Edit and Archive buttons */}
-                  <div className="absolute top-3 right-3 flex space-x-1" key={`buttons-${courseKey}`}>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditForm(course);
+          {courses && courses.length > 0 ? (
+            courses.map((course) => {
+              // Generate a truly unique key for this course
+              const courseKey = generateUniqueKey('course', course);
+              return (
+                <div
+                  key={courseKey}
+                  className="rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200/80"
+                  style={{ maxWidth: '300px' }}
+                >
+                  <div className="relative" key={`content-${courseKey}`}>
+                    <Link
+                      to={`/class/${course.courseId || course.id || course.courseGuid}`}
+                      state={{
+                        className: course.name,
+                        section: course.section,
+                        classCode: course.enrollmentCode,
+                        color: course.color || '#1a73e8',
+                        coverImage: (() => {
+                          // Generate a safe card ID that won't be undefined
+                          const cardId = course.courseId?.toString() || course.id || course.courseGuid || '';
+                          // Check if we have a cached image
+                          if (cardId && courseImages[cardId] && isValidImageUrl(courseImages[cardId])) {
+                            return courseImages[cardId];
+                          }
+                          // Use course cover image if valid
+                          if (isValidImageUrl(course.coverImage)) {
+                            return course.coverImage;
+                          }
+                          // Fallback to default
+                          return FALLBACK_IMAGES.default;
+                        })()
                       }}
-                      className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
-                      title="Edit class"
+                      className="block rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300"
                     >
-                      <Edit size={18} />
-                    </button>
+                      {renderClassCard(course)}
+                    </Link>
                     
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleArchiveClass(course);
-                      }}
-                      className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
-                      title="Archive class"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {/* Course Menu - shown to everyone */}
+                    <div className="absolute top-3 right-3 flex space-x-1" key={`buttons-${courseKey}`}>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Normalize the course ID
+                          const courseId = course.courseId?.toString() || course.id || course.courseGuid;
+                          setOpenMenuCourseId(openMenuCourseId === courseId ? null : courseId);
+                        }}
+                        className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
+                        title="Course options"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      
+                      {/* Dropdown Menu */}
+                      {openMenuCourseId === (course.courseId?.toString() || course.id || course.courseGuid) && (
+                        <div 
+                          ref={dropdownRef}
+                          className="absolute right-0 top-9 w-40 bg-white rounded-md shadow-lg py-1 z-30"
+                        >
+                          {/* Options for Teachers */}
+                          {!isStudent && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenMenuCourseId(null);
+                                  openEditForm(course);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <Edit size={16} className="text-gray-500" />
+                                Edit class
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenMenuCourseId(null);
+                                  handleArchiveClass(course);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <Trash2 size={16} className="text-gray-500" />
+                                Archive class
+                              </button>
+                            </>
+                          )}
+                          
+                          {/* Options for Students */}
+                          {isStudent && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenMenuCourseId(null);
+                                
+                                // Get the correct course ID
+                                const courseId = course.courseId?.toString() || course.id || course.courseGuid;
+                                console.log('Setting up unenroll for course:', courseId, course.name);
+                                
+                                // Set the state for the unenroll modal
+                                setUnenrollCourseId(courseId);
+                                setUnenrollCourseName(course.name);
+                                setShowUnenrollModal(true);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <LogOut size={16} className="text-red-500" />
+                              Unenroll
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Edit and Archive buttons - only shown to teachers */}
+                    {!isStudent && (
+                      <div className="absolute top-3 right-10 flex space-x-1" key={`edit-buttons-${courseKey}`}>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openEditForm(course);
+                          }}
+                          className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
+                          title="Edit class"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleArchiveClass(course);
+                          }}
+                          className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
+                          title="Archive class"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
+              );
+            })
+          ) : (
+            <div className="col-span-full text-center py-8">
+              <div className="bg-white rounded-lg shadow-md p-8 max-w-lg mx-auto">
+                <h2 className="text-xl text-gray-700 font-medium mb-4">
+                  {isStudent ? 'No Enrolled Classes Found' : 'No Classes Found'}
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  {isStudent ? 
+                    'You are not enrolled in any classes yet. Use a class code from your teacher to join a class.' : 
+                    'You haven\'t created any classes yet.'}
+                </p>
+                {isStudent ? (
+                  <div className="space-y-4">
+                    <button
+                      onClick={() => setShowEnrollModal(true)}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-lg rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus size={20} />
+                      <span>Join a class with code</span>
+                    </button>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Your teacher will provide you with a class code to enter
+                    </p>
+                    <div className="mt-4 text-xs text-gray-400">
+                      Role: Student | Using student authentication
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    <p>Create a class to get started</p>
+                    <div className="mt-4 text-xs text-gray-400">
+                      Role: Teacher
+                    </div>
+                  </div>
+                )}
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
 
         {/* Archive Confirmation Modal */}

@@ -1,44 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { useParams } from 'react-router-dom';
 import { X, UserPlus } from 'lucide-react';
 import { useStudentData } from '../contexts/StudentDataContext';
+import { addMember } from '../api/membersApi';
+import { ClassDataContext } from '../pages/ClassPage';
 
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isTeacherMode?: boolean;
 }
 
-const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose }) => {
+const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, isTeacherMode = false }) => {
+  const { classId } = useParams<{ classId: string }>();
+  const classData = useContext(ClassDataContext);
   const { addStudent } = useStudentData();
+  
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const handleSubmit = () => {
-    if (!name.trim()) return;
+  const handleSubmit = async () => {
+    if (!name.trim() || isSubmitting) return;
     
-    // Create a new student with a unique ID
-    const newStudent = {
-      id: `student-${Date.now()}`,
-      name: name.trim(),
-      email: email.trim() || undefined,
-      assignmentAvg: '0%',
-      participation: '0%',
-      finalGrade: '0%',
-      finalGradeColor: 'text-red-600'
-    };
+    setIsSubmitting(true);
+    setError(null);
     
-    // Add the student to the context
-    addStudent(newStudent);
-    
-    // Reset form and close modal
-    setName('');
-    setEmail('');
-    onClose();
-    
-    // Dispatch a custom event to notify other components about the new student
-    const newStudentEvent = new CustomEvent('newStudentAdded', {
-      detail: { studentId: newStudent.id }
-    });
-    window.dispatchEvent(newStudentEvent);
+    try {
+      // Get enrollment code from class data
+      const enrollmentCode = classData.enrollmentCode;
+      
+      if (!enrollmentCode && !classId) {
+        setError('Course information not found. Please try again.');
+        return;
+      }
+      
+      // Add member to the course via API
+      // Note: We're using the same API call for both teachers and students
+      // The backend should distinguish based on the role parameter
+      const userData = {
+        name: name.trim(),
+        email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        role: isTeacherMode ? 'Teacher' : 'Student',
+        classId: classId // Passing the classId for teacher additions
+      };
+      
+      console.log('Adding member with data:', userData);
+      
+      const success = await addMember(enrollmentCode || '', userData);
+      
+      if (success) {
+        // For backwards compatibility, also add to StudentDataContext
+        if (!isTeacherMode) {
+          const newStudent = {
+            id: `student-${Date.now()}`,
+            name: name.trim(),
+            email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@example.com`,
+            assignmentAvg: '0%',
+            participation: '0%',
+            finalGrade: '0%',
+            finalGradeColor: 'text-red-600'
+          };
+          
+          addStudent(newStudent);
+        }
+        
+        // Reset form and close modal
+        setName('');
+        setEmail('');
+        onClose();
+        
+        // Force reload the people page by dispatching an event
+        window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+      } else {
+        setError(`Failed to add ${isTeacherMode ? 'teacher' : 'student'}. Please try again.`);
+      }
+    } catch (err) {
+      console.error(`Error adding ${isTeacherMode ? 'teacher' : 'student'}:`, err);
+      setError(`An error occurred while adding the ${isTeacherMode ? 'teacher' : 'student'}.`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   if (!isOpen) return null;
@@ -50,36 +93,44 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose }) =>
           <button onClick={onClose} className="text-[#5f6368] hover:bg-[#f8f9fa] p-2 rounded-full">
             <X size={24} />
           </button>
-          <h2 className="text-[#3c4043] text-[22px] font-normal">Add Student</h2>
+          <h2 className="text-[#3c4043] text-[22px] font-normal">
+            Add {isTeacherMode ? 'Teacher' : 'Student'}
+          </h2>
         </div>
         
         <div className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+              {error}
+            </div>
+          )}
+          
           <div>
-            <label htmlFor="student-name" className="block text-sm font-medium text-[#3c4043] mb-1">
-              Student Name *
+            <label htmlFor="member-name" className="block text-sm font-medium text-[#3c4043] mb-1">
+              {isTeacherMode ? 'Teacher' : 'Student'} Name *
             </label>
             <input
-              id="student-name"
+              id="member-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border border-[#dadce0] rounded focus:outline-none focus:ring-2 focus:ring-[#1a73e8]"
-              placeholder="Enter student name"
+              placeholder={`Enter ${isTeacherMode ? 'teacher' : 'student'} name`}
               required
             />
           </div>
           
           <div>
-            <label htmlFor="student-email" className="block text-sm font-medium text-[#3c4043] mb-1">
+            <label htmlFor="member-email" className="block text-sm font-medium text-[#3c4043] mb-1">
               Email (optional)
             </label>
             <input
-              id="student-email"
+              id="member-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-[#dadce0] rounded focus:outline-none focus:ring-2 focus:ring-[#1a73e8]"
-              placeholder="Enter student email"
+              placeholder={`Enter ${isTeacherMode ? 'teacher' : 'student'} email`}
             />
           </div>
           
@@ -92,11 +143,24 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose }) =>
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!name.trim()}
-              className={`px-4 py-2 rounded flex items-center gap-2 ${name.trim() ? 'bg-[#1a73e8] text-white hover:bg-[#1557b0]' : 'bg-[#dadce0] text-[#5f6368] cursor-not-allowed'}`}
+              disabled={!name.trim() || isSubmitting}
+              className={`px-4 py-2 rounded flex items-center gap-2 ${
+                name.trim() && !isSubmitting 
+                  ? 'bg-[#1a73e8] text-white hover:bg-[#1557b0]' 
+                  : 'bg-[#dadce0] text-[#5f6368] cursor-not-allowed'
+              }`}
             >
-              <UserPlus size={18} />
-              Add Student
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <UserPlus size={18} />
+                  Add {isTeacherMode ? 'Teacher' : 'Student'}
+                </>
+              )}
             </button>
           </div>
         </div>

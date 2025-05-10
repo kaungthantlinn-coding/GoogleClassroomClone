@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { createCourse, enrollCourse } from '../api/courseApi';
+import { createCourse, enrollCourse, addTeacherToCourse } from '../api/courseApi';
 
 interface ClassActionDialogProps {
   isOpen: boolean;
@@ -19,6 +19,8 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
   const [subject, setSubject] = useState('');
   const [room, setRoom] = useState('');
   const [enrollmentCode, setEnrollmentCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset form fields when dialog opens or type changes
   React.useEffect(() => {
@@ -139,6 +141,20 @@ export default function ClassActionDialog({ isOpen, onClose, type }: ClassAction
             color: finalColor
           }
         });
+
+        // Add current user as teacher if they created the course
+        if (createdCourse.id && user) {
+          try {
+            await addTeacherToCourse(createdCourse.id, {
+              name: user.name,
+              email: user.email
+            });
+            console.log('Added creator as teacher to the course');
+          } catch (teacherError) {
+            console.error('Error adding teacher to course:', teacherError);
+            // Continue anyway since the course was created
+          }
+        }
       } catch (error) {
         console.error('Error creating course:', error);
         alert('Failed to create course. Please try again.');

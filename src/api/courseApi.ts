@@ -36,7 +36,10 @@ const courseApi = axios.create({
 });
 
 // Default auth token that works with the API
-const DEFAULT_AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA0IiwiZW1haWwiOiJ0ZWFjaGVyMUBnbWFpbC5jb20iLCJqdGkiOiIwYmZhYjBiZi1kZWY0LTQyNWMtYTA2YS1kNDFiNDJmYzUxNGUiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoidGVhY2hlciIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlRlYWNoZXIiLCJleHAiOjE3NDYzNjE4ODgsImlzcyI6IkNsYXNzcm9vbUFQSSIsImF1ZCI6IkNsYXNzcm9vbUNsaWVudCJ9._-a-uyMdr3VMBEnRWDfjLCq_bfvQnOmCL4jApTiZH-4';
+const DEFAULT_TEACHER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA0IiwiZW1haWwiOiJ0ZWFjaGVyMUBnbWFpbC5jb20iLCJqdGkiOiIwYmZhYjBiZi1kZWY0LTQyNWMtYTA2YS1kNDFiNDJmYzUxNGUiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoidGVhY2hlciIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlRlYWNoZXIiLCJleHAiOjE3NDYzNjE4ODgsImlzcyI6IkNsYXNzcm9vbUFQSSIsImF1ZCI6IkNsYXNzcm9vbUNsaWVudCJ9._-a-uyMdr3VMBEnRWDfjLCq_bfvQnOmCL4jApTiZH-4';
+
+// Default student token
+const DEFAULT_STUDENT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA1IiwiZW1haWwiOiJzdHVkZW50MUBnbWFpbC5jb20iLCJqdGkiOiIxYmZhYjBiZi1kZWY0LTQyNWMtYTA2YS1kNDFiNDJmYzUxNGUiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoic3R1ZGVudCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlN0dWRlbnQiLCJleHAiOjE3NDYzNjE4ODgsImlzcyI6IkNsYXNzcm9vbUFQSSIsImF1ZCI6IkNsYXNzcm9vbUNsaWVudCJ9.Hs4xwjJXG9F_xT0jcI_bSX1PJ_d3hV9RsGZ4piOvCFc';
 
 // Add token to requests if available
 const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
@@ -57,10 +60,16 @@ const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestC
     }
   }
   
-  // For development purposes, if no token exists, use the default token
+  // Get user role if available
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+  
+  // For development purposes, if no token exists, use the appropriate default token based on role
   if (!token) {
-    token = DEFAULT_AUTH_TOKEN;
-    console.warn('Using default auth token. In production, this should be a user-specific token.');
+    // Use student token if role is specified as student, otherwise use teacher token
+    token = isStudent ? DEFAULT_STUDENT_TOKEN : DEFAULT_TEACHER_TOKEN;
+    console.warn(`Using default ${isStudent ? 'student' : 'teacher'} auth token. In production, this should be a user-specific token.`);
+    
     // Store it in sessionStorage for future requests
     try {
       sessionStorage.setItem('auth_token', token);
@@ -71,6 +80,9 @@ const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestC
       console.error('Failed to store token in storage:', e);
     }
   }
+  
+  // Debug auth token
+  console.log(`Using auth token for role ${isStudent ? 'student' : 'teacher'}`);
   
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -88,12 +100,19 @@ courseApi.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       
-      // Reset the token to the default token in development
-      sessionStorage.setItem('auth_token', DEFAULT_AUTH_TOKEN);
-      localStorage.setItem('auth_token', DEFAULT_AUTH_TOKEN);
+      // Get user role if available
+      const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+      const isStudent = userRole?.toLowerCase() === 'student';
+      const defaultToken = isStudent ? DEFAULT_STUDENT_TOKEN : DEFAULT_TEACHER_TOKEN;
+      
+      console.log(`Refreshing token for role ${isStudent ? 'student' : 'teacher'}`);
+      
+      // Reset the token to the appropriate default token
+      sessionStorage.setItem('auth_token', defaultToken);
+      localStorage.setItem('auth_token', defaultToken);
       
       // Update the Authorization header with the default token
-      originalRequest.headers.Authorization = `Bearer ${DEFAULT_AUTH_TOKEN}`;
+      originalRequest.headers.Authorization = `Bearer ${defaultToken}`;
       
       // Retry the original request with the new token
       return courseApi(originalRequest);
@@ -195,7 +214,16 @@ const getCachedCourse = async (id: string): Promise<Course> => {
 // API Functions
 export const getCourses = async (): Promise<Course[]> => {
   try {
+    // Check if user is a student
+    const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+    const isStudent = userRole?.toLowerCase() === 'student';
+
+    // For students, we need to get courses they're enrolled in
+    // Since there's no explicit /enrolled endpoint, we'll use the main endpoint
+    // The backend should filter based on the user's role in the JWT token
     const response = await courseApi.get<Course[]>('');
+    
+    console.log(`Fetched courses as ${isStudent ? 'student' : 'teacher'}:`, response.data);
     return response.data;
   } catch (error) {
     return handleApiError(error, 'Failed to fetch courses');
@@ -299,10 +327,21 @@ export const enrollCourse = async (id: string): Promise<void> => {
 };
 
 export const unenrollCourse = async (id: string): Promise<void> => {
+  if (!id || id === 'undefined') {
+    console.error('Invalid course ID provided for unenrollment:', id);
+    return Promise.reject(new Error(`Invalid course ID for unenrollment: ${id}`));
+  }
+
   try {
+    console.log(`Attempting to unenroll from course with ID: ${id}`);
+    
+    // Make the API call
     await courseApi.post(`/${id}/unenroll`);
+    
+    console.log(`Successfully unenrolled from course with ID: ${id}`);
     return Promise.resolve();
   } catch (error) {
+    console.error('Unenroll API Error:', error);
     return handleApiError(error, `Failed to unenroll from course with ID ${id}`);
   }
 };
@@ -349,5 +388,82 @@ export const removeMember = async (courseId: string, userId: string): Promise<vo
     return Promise.resolve();
   } catch (error) {
     return handleApiError(error, `Failed to remove member ${userId} from course ${courseId}`);
+  }
+};
+
+// Add a teacher to a course
+export const addTeacherToCourse = async (courseId: string, teacherData: { name: string, email: string }): Promise<void> => {
+  try {
+    const response = await courseApi.post(`/${courseId}/members`, {
+      userId: teacherData.email, // Assuming email is used as userId
+      name: teacherData.name,
+      email: teacherData.email,
+      role: 'Teacher'
+    });
+    
+    console.log('Teacher added successfully to course:', response.data);
+    return Promise.resolve();
+  } catch (error) {
+    return handleApiError(error, `Failed to add teacher to course with ID ${courseId}`);
+  }
+};
+
+// Default colors that can be used when a course doesn't have a color
+const DEFAULT_COLORS = [
+  '#4285f4', // Blue
+  '#0f9d58', // Green
+  '#f4b400', // Yellow
+  '#db4437', // Red
+  '#673ab7', // Purple
+  '#795548', // Brown
+  '#009688', // Teal
+  '#e91e63', // Pink
+];
+
+// Function to ensure a course has colors assigned
+export const ensureCourseColor = async (course: Course): Promise<Course> => {
+  // If the course already has a color, return it as is
+  if (course.color) {
+    return course;
+  }
+  
+  try {
+    // Try to regenerate colors from the server
+    const updatedCourse = await regenerateColors(course.id);
+    return updatedCourse;
+  } catch (error) {
+    // If server-side regeneration fails, assign a color client-side
+    console.warn(`Failed to regenerate colors for course ${course.id}, using fallback color`);
+    
+    // Generate a deterministic color based on the course ID
+    const colorIndex = parseInt(course.id) % DEFAULT_COLORS.length;
+    const fallbackColor = DEFAULT_COLORS[colorIndex];
+    
+    return {
+      ...course,
+      color: fallbackColor,
+      textColor: '#ffffff' // Default to white text
+    };
+  }
+};
+
+// Helper function to ensure colors for a list of courses
+export const ensureCourseColors = async (courses: Course[]): Promise<Course[]> => {
+  return Promise.all(courses.map(course => ensureCourseColor(course)));
+};
+
+// Enroll in a course by enrollment code (for students)
+export const enrollCourseByCode = async (enrollmentCode: string): Promise<void> => {
+  try {
+    console.log(`Attempting to enroll with code: ${enrollmentCode}`);
+    
+    // POST to /enroll-by-code endpoint with the enrollment code
+    await courseApi.post('/enroll-by-code', { enrollmentCode });
+    
+    console.log('Successfully enrolled in course with code');
+    return Promise.resolve();
+  } catch (error) {
+    console.error('Error enrolling with code:', error);
+    return handleApiError(error, `Failed to enroll in course with code ${enrollmentCode}`);
   }
 };

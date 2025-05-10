@@ -97,6 +97,13 @@ export const login = async (credentials: LoginRequest): Promise<User> => {
     
     // Store token in sessionStorage
     sessionStorage.setItem('auth_token', response.data.token);
+    
+    // Store user role
+    if (response.data.user && response.data.user.role) {
+      sessionStorage.setItem('user_role', response.data.user.role);
+      localStorage.setItem('user_role', response.data.user.role);
+    }
+    
     return response.data.user;
   } catch (error) {
     return handleApiError(error, 'Login failed. Please check your credentials.');
@@ -114,6 +121,13 @@ export const register = async (userData: RegisterRequest): Promise<User> => {
     
     // Store token in sessionStorage
     sessionStorage.setItem('auth_token', response.data.token);
+    
+    // Store user role
+    if (response.data.user && response.data.user.role) {
+      sessionStorage.setItem('user_role', response.data.user.role);
+      localStorage.setItem('user_role', response.data.user.role);
+    }
+    
     return response.data.user;
   } catch (error) {
     return handleApiError(error, 'Registration failed. Please try again.');
@@ -121,8 +135,13 @@ export const register = async (userData: RegisterRequest): Promise<User> => {
 };
 
 export const logout = (): void => {
-  // Remove token from sessionStorage
+  // Remove token from sessionStorage and localStorage
   sessionStorage.removeItem('auth_token');
+  localStorage.removeItem('auth_token');
+  
+  // Remove user role
+  sessionStorage.removeItem('user_role');
+  localStorage.removeItem('user_role');
   
   // You could also call a logout endpoint if needed
   try {
@@ -138,6 +157,13 @@ export const getCurrentUser = async (): Promise<User | null> => {
     if (!token) return null;
     
     const response = await authApi.get<User>('/me');
+    
+    // Store user role if available
+    if (response.data && response.data.role) {
+      sessionStorage.setItem('user_role', response.data.role);
+      localStorage.setItem('user_role', response.data.role);
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Failed to get current user:', error);
@@ -145,6 +171,8 @@ export const getCurrentUser = async (): Promise<User | null> => {
     // Clear token if it's an authentication error (401)
     if (axios.isAxiosError(error) && error.response?.status === 401) {
       sessionStorage.removeItem('auth_token');
+      sessionStorage.removeItem('user_role');
+      localStorage.removeItem('user_role');
     }
     
     return null;

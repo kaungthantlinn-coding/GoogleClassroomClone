@@ -1,40 +1,103 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
+import { useParams } from 'react-router-dom';
 import { UserPlus, MoreVertical, Trash } from 'lucide-react';
 import { useStudentData } from '../contexts/StudentDataContext';
 import AddStudentModal from '../components/AddStudentModal';
+import { getCourseMembers, Member, removeMember, addMember } from '../api/membersApi';
+import { ClassDataContext } from './ClassPage';
+import { useAuthStore } from '../stores/useAuthStore';
 
-interface Teacher {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
+interface Teacher extends Member {
+  role: 'Teacher';
+}
+
+interface Student extends Member {
+  role: 'Student';
 }
 
 export default function PeoplePage() {
-  const { students, removeStudent } = useStudentData();
+  const { classId } = useParams<{ classId: string }>();
+  const classData = useContext(ClassDataContext);
+  const { removeStudent } = useStudentData();
+  
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [isTeacherMode, setIsTeacherMode] = useState(false);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Listen for student data updates
+  // Function to add a teacher directly
+  const handleAddTeacher = async () => {
+    if (!classId || !classData.enrollmentCode) return;
+    
+    try {
+      // For testing purposes, add a hardcoded teacher
+      const success = await addMember(classData.enrollmentCode, {
+        name: 'Test Teacher',
+        email: 'teacher@example.com'
+      });
+      
+      if (success) {
+        console.log('Teacher added successfully!');
+        // Refresh the members list
+        window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+      }
+    } catch (err) {
+      console.error('Error adding teacher:', err);
+      setError('Failed to add teacher. Please try again.');
+    }
+  };
+  
+  // Load members from API
   useEffect(() => {
-    const handleStudentUpdate = () => {
-      // The StudentDataContext will handle the actual data updates
-      // This effect is just to trigger UI refreshes when needed
-      console.log('Student data updated');
+    const loadMembers = async () => {
+      if (!classId) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        console.log('Fetching members for class ID:', classId);
+        const members = await getCourseMembers(classId);
+        console.log('API response for members:', members);
+        
+        // Separate members by role
+        const teachersList = members.filter(m => m.role === 'Teacher') as Teacher[];
+        const studentsList = members.filter(m => m.role === 'Student') as Student[];
+        
+        console.log('Filtered teachers:', teachersList);
+        console.log('Filtered students:', studentsList);
+        
+        setTeachers(teachersList);
+        setStudents(studentsList);
+      } catch (err) {
+        console.error('Error loading course members:', err);
+        setError('Failed to load course members. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
     };
     
-    window.addEventListener('studentDataUpdated', handleStudentUpdate);
-    window.addEventListener('newStudentAdded', handleStudentUpdate);
+    loadMembers();
+    
+    // Listen for updates to refresh the list
+    const handleMembersUpdated = () => {
+      loadMembers();
+    };
+    
+    window.addEventListener('courseMembersUpdated', handleMembersUpdated);
     
     return () => {
-      window.removeEventListener('studentDataUpdated', handleStudentUpdate);
-      window.removeEventListener('newStudentAdded', handleStudentUpdate);
+      window.removeEventListener('courseMembersUpdated', handleMembersUpdated);
     };
-  }, []);
+  }, [classId]);
   
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -50,14 +113,85 @@ export default function PeoplePage() {
     };
   }, []);
 
-  const [teachers] = useState<Teacher[]>([
-    {
-      id: '1',
-      name: 'Kaung Kaung Thant Linn 123',
-      email: 'kaung@example.com',
-      avatar: undefined
+  // Handle removing a student
+  const handleRemoveStudent = async (userId: string) => {
+    if (!classId) return;
+    
+    try {
+      const success = await removeMember(classId, userId);
+      
+      if (success) {
+        // Update local state to remove the student
+        setStudents(prev => prev.filter(student => student.userId !== userId));
+        
+        // Also update the StudentDataContext for compatibility
+        if (studentToDelete) {
+          removeStudent(studentToDelete);
+        }
+      }
+    } catch (err) {
+      console.error('Error removing student:', err);
+      setError('Failed to remove student. Please try again.');
+    } finally {
+      setDeleteModalVisible(false);
+      setStudentToDelete(null);
     }
-  ]);
+  };
+
+  // Show AddStudentModal with teacher mode
+  const openAddTeacherModal = () => {
+    setIsTeacherMode(true);
+    setShowAddStudentModal(true);
+  };
+
+  // Show AddStudentModal with student mode
+  const openAddStudentModal = () => {
+    setIsTeacherMode(false);
+    setShowAddStudentModal(true);
+  };
+
+  // Function to add the current user as a teacher to this course
+  const addCurrentUserAsTeacher = async () => {
+    if (!classId) return;
+    
+    try {
+      // Get current user info from auth store
+      const user = useAuthStore.getState().user;
+      
+      if (!user) {
+        setError('You must be logged in to add yourself as a teacher');
+        return;
+      }
+      
+      console.log('Adding current user as teacher:', user);
+      
+      const userData = {
+        name: user.name,
+        email: user.email,
+        role: 'Teacher' as const,
+        classId: classId
+      };
+      
+      // First try using the enrollment code if available
+      if (classData.enrollmentCode) {
+        await addMember(classData.enrollmentCode, userData);
+      } else {
+        // If no enrollment code, import and use the direct method
+        const { addTeacherToCourse } = await import('../api/courseApi');
+        await addTeacherToCourse(classId, {
+          name: user.name,
+          email: user.email
+        });
+      }
+      
+      // Refresh the members list
+      window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+      
+    } catch (err) {
+      console.error('Error adding current user as teacher:', err);
+      setError('Failed to add you as a teacher. Please try again.');
+    }
+  };
 
   const EmptyStateIllustration = () => (
     <svg viewBox="0 0 221 161" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="w-48 h-48">
@@ -95,9 +229,18 @@ export default function PeoplePage() {
     <div className="min-h-screen bg-[#f9f9f9]">
       {/* Add Student Modal */}
       <AddStudentModal 
-        isOpen={showAddStudentModal} 
-        onClose={() => setShowAddStudentModal(false)} 
+        isOpen={showAddStudentModal}
+        onClose={() => setShowAddStudentModal(false)}
+        isTeacherMode={isTeacherMode}
       />
+      
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 max-w-[1000px] mx-auto">
+          {error}
+        </div>
+      )}
+      
       {/* Main Content */}
       <div className="max-w-[1000px] mx-auto px-6 py-6">
         {/* Teachers Section */}
@@ -106,35 +249,59 @@ export default function PeoplePage() {
             <h2 className="text-[32px] font-normal text-[#3c4043]">Teachers</h2>
             <button 
               className="p-2 hover:bg-[#f8f9fa] rounded-full"
-              onClick={() => setShowAddStudentModal(true)}
+              onClick={openAddTeacherModal}
             >
               <UserPlus size={20} className="text-[#1a73e8]" />
             </button>
           </div>
-          <div className="space-y-2">
-            {teachers.map((teacher) => (
-              <div
-                key={teacher.id}
-                className="flex items-center gap-4 p-3 hover:bg-[#f8f9fa] rounded-lg"
-              >
-                {teacher.avatar ? (
-                  <img
-                    src={teacher.avatar}
-                    alt={teacher.name}
-                    className="w-10 h-10 rounded-full"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-[15px]">
-                    {teacher.name[0]}
-                  </div>
-                )}
-                <div>
-                  <div className="text-[14px] text-[#3c4043]">{teacher.name}</div>
-                  <div className="text-[12px] text-[#5f6368]">{teacher.email}</div>
+          
+          {isLoading ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+              <div className="animate-pulse flex space-x-4 items-center justify-center">
+                <div className="rounded-full bg-slate-200 h-10 w-10"></div>
+                <div className="flex-1 space-y-2 max-w-[300px]">
+                  <div className="h-4 bg-slate-200 rounded"></div>
+                  <div className="h-3 bg-slate-200 rounded w-5/6"></div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : teachers.length > 0 ? (
+            <div className="space-y-2">
+              {teachers.map((teacher) => (
+                <div
+                  key={teacher.id}
+                  className="flex items-center gap-4 p-3 hover:bg-[#f8f9fa] rounded-lg"
+                >
+                  {teacher.avatar ? (
+                    <img
+                      src={teacher.avatar}
+                      alt={teacher.name}
+                      className="w-10 h-10 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-[15px]">
+                      {teacher.name[0]}
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[14px] text-[#3c4043]">{teacher.name}</div>
+                    <div className="text-[12px] text-[#5f6368]">{teacher.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+              <EmptyStateIllustration />
+              <p className="text-[#5f6368] mt-4">No teachers in this class yet</p>
+              <button 
+                className="mt-4 px-4 py-2 bg-[#1a73e8] text-white rounded-md hover:bg-[#1765c6] transition-colors"
+                onClick={addCurrentUserAsTeacher}
+              >
+                Add Teacher
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Students Section */}
@@ -143,12 +310,27 @@ export default function PeoplePage() {
             <h2 className="text-[32px] font-normal text-[#3c4043]">Students</h2>
             <button 
               className="p-2 hover:bg-[#f8f9fa] rounded-full"
-              onClick={() => setShowAddStudentModal(true)}
+              onClick={openAddStudentModal}
             >
               <UserPlus size={20} className="text-[#1a73e8]" />
             </button>
           </div>
-          {students.length > 0 ? (
+          
+          {isLoading ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-8">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex space-x-4 items-center">
+                    <div className="rounded-full bg-slate-200 h-10 w-10"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-slate-200 rounded"></div>
+                      <div className="h-3 bg-slate-200 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : students.length > 0 ? (
             <div className="space-y-2 bg-white rounded-lg border border-gray-200">
               {students.map((student) => (
                 <div
@@ -169,7 +351,7 @@ export default function PeoplePage() {
                     )}
                     <div>
                       <div className="text-[14px] text-[#3c4043]">{student.name}</div>
-                      <div className="text-[12px] text-[#5f6368]">{student.email || `student${student.id}@example.com`}</div>
+                      <div className="text-[12px] text-[#5f6368]">{student.email}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -192,7 +374,7 @@ export default function PeoplePage() {
                         <button 
                           className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm flex items-center gap-2 text-red-600"
                           onClick={() => {
-                            setStudentToDelete(student.id);
+                            setStudentToDelete(student.userId);
                             setDeleteModalVisible(true);
                             setActiveDropdownId(null);
                           }}
@@ -212,7 +394,7 @@ export default function PeoplePage() {
               <p className="text-[#5f6368] mt-4">No students in this class yet</p>
               <button 
                 className="mt-4 px-4 py-2 bg-[#1a73e8] text-white rounded-md hover:bg-[#1765c6] transition-colors"
-                onClick={() => setShowAddStudentModal(true)}
+                onClick={openAddStudentModal}
               >
                 Add Student
               </button>
@@ -239,9 +421,7 @@ export default function PeoplePage() {
               <button
                 onClick={() => {
                   if (studentToDelete) {
-                    removeStudent(studentToDelete);
-                    setDeleteModalVisible(false);
-                    setStudentToDelete(null);
+                    handleRemoveStudent(studentToDelete);
                   }
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
