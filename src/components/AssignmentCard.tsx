@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Calendar, MoreVertical, Edit, Trash } from 'lucide-react';
+import { FileText, Calendar, MoreVertical, Edit, Trash, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface AssignmentCardProps {
   id?: string; // Make id optional to handle cases where it might be undefined
   title: string;
   description?: string;
+  // instructions field removed as it's not used/displayed anymore
   points: string;
   dueDate: string;
   onEdit?: (id: string) => void;
@@ -16,6 +17,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   id,
   title,
   description,
+  // instructions removed as it's not used
   points,
   dueDate,
   onEdit,
@@ -40,6 +42,11 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Get user role from localStorage or sessionStorage
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+  const isTeacher = userRole?.toLowerCase() === 'teacher' || !isStudent; // Default to teacher if role not set
+
   const handleViewSubmissions = () => {
     // Check if we're in a class context
     const currentPath = window.location.pathname;
@@ -52,6 +59,21 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
     } else {
       // Otherwise use the generic submissions route
       navigate(`/submissions/${id}`);
+    }
+  };
+
+  const handleSubmitAssignment = () => {
+    // Check if we're in a class context
+    const currentPath = window.location.pathname;
+    const classMatch = currentPath.match(/\/class\/([^\/]+)/);
+    
+    if (classMatch && classMatch[1]) {
+      // If we're in a class, navigate to the student submission page
+      const classId = classMatch[1];
+      navigate(`/class/${classId}/assignment/${id}/submit`);
+    } else {
+      // Otherwise use the generic submission route
+      navigate(`/assignment/${id}/submit`);
     }
   };
 
@@ -157,11 +179,14 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
           </div>
         </div>
         
+        {/* Display description if available */}
         {description && (
-          <p className="ml-8 text-[#5f6368] mb-4">
-            {description}
-          </p>
+          <div className="ml-8 mb-4">
+            <p className="text-[#5f6368]">{description}</p>
+          </div>
         )}
+        
+        {/* Instructions are hidden in the assignment card as requested */}
         
         <div className="flex justify-between items-center mt-3">
           <div className="flex items-center gap-1 text-xs sm:text-sm">
@@ -197,12 +222,22 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
             )}
           </div>
           
-          <button 
-            onClick={handleViewSubmissions}
-            className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            View submissions
-          </button>
+          {isTeacher ? (
+            <button 
+              onClick={handleViewSubmissions}
+              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-1"
+            >
+              <span>View submissions</span>
+            </button>
+          ) : (
+            <button 
+              onClick={handleSubmitAssignment}
+              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-1 text-blue-600"
+            >
+              <Upload size={14} />
+              <span>Submit assignment</span>
+            </button>
+          )}
         </div>
       </div>
 

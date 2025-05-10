@@ -11,6 +11,7 @@ import ClassPage from '../pages/ClassPage';
 import ClassworkPage from '../pages/ClassworkPage';
 import SubmissionsPage from '../pages/SubmissionsPage';
 import StudentSubmissionPage from '../pages/StudentSubmissionPage';
+import StudentAssignmentSubmitPage from '../pages/StudentAssignmentSubmitPage';
 import GradesPage from '../pages/GradesPage';
 import LoginPage from '../pages/LoginPage';
 import SignupPage from '../pages/SignupPage';
@@ -47,11 +48,13 @@ export const router = createBrowserRouter([
       { path: 'class/:classId/grades', element: <GradesPage /> },
       { path: 'class/:classId/submissions/:assignmentId', element: <SubmissionsPage /> },
       { path: 'class/:classId/submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
+      { path: 'class/:classId/assignment/:assignmentId/submit', element: <StudentAssignmentSubmitPage /> },
 
       // Non-class context routes
       { path: 'classwork', element: <ClassworkPage /> },
       { path: 'submissions/:assignmentId', element: <SubmissionsPage /> },
       { path: 'submissions/:assignmentId/student/:studentId', element: <StudentSubmissionPage /> },
+      { path: 'assignment/:assignmentId/submit', element: <StudentAssignmentSubmitPage /> },
     ],
   },
   {

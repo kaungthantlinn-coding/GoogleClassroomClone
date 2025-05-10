@@ -7,8 +7,6 @@ import { Table, TableHeader, TableBody, TableCell, TableHead, TableRow } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Slider } from '../components/ui/slider';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui/select';
-import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { useStudentData } from '../contexts/StudentDataContext';
 import * as storageApi from '../api/storageApi';
 import * as assignmentApi from '../api/assignmentApi';
@@ -18,8 +16,11 @@ interface Submission {
   studentName: string;
   studentId: string;
   status: 'submitted' | 'late' | 'missing' | 'graded';
-  submittedDate: string;
+  submittedDate?: string;
   grade?: number;
+  letterGrade?: string;
+  gradePercentage?: number;
+  feedback?: string;
 }
 
 interface Stats {
@@ -111,50 +112,49 @@ const SubmissionsPage: React.FC = () => {
       try {
         // Use existing submissions from context if available
         if (contextSubmissions && contextSubmissions.length > 0) {
-          setSubmissions(contextSubmissions);
+          setSubmissions(contextSubmissions as Submission[]);
           return;
         }
         
         // Otherwise fetch from API
         const submissionsData = await assignmentApi.getSubmissions(assignmentId);
+        console.log('Raw API submissions data:', submissionsData);
         
         if (submissionsData && submissionsData.length > 0) {
-          setSubmissions(submissionsData);
+          // Map API response data to match our Submission interface
+          const mappedSubmissions = submissionsData.map(submission => {
+            // Ensure status is one of the accepted enum values
+            let status: 'submitted' | 'late' | 'missing' | 'graded';
+            
+            if (submission.graded) {
+              status = 'graded';
+            } else if (submission.submittedAt) {
+              // Check if submission is late based on date
+              const submittedDate = new Date(submission.submittedAt);
+              const now = new Date();
+              // If submission date is more than 24 hours ago, consider it late
+              // This is just an example logic, adjust as needed
+              status = (now.getTime() - submittedDate.getTime() > 24 * 60 * 60 * 1000) ? 'late' : 'submitted';
+            } else {
+              status = 'missing';
+            }
+            
+            return {
+              id: submission.submissionId?.toString() || `submission-${Date.now()}`,
+              studentId: submission.userId?.toString() || 'unknown',
+              studentName: submission.userName || 'Unknown Student',
+              status: status,
+              submittedDate: submission.submittedAt,
+              grade: submission.grade,
+              feedback: submission.feedback
+            };
+          });
+          
+          console.log('Mapped submissions:', mappedSubmissions);
+          setSubmissions(mappedSubmissions);
         } else {
-          // Fallback to default mock data
-          setSubmissions([
-            {
-              id: 'sub-1001',
-              studentName: 'Alice Smith',
-              studentId: '1001',
-              status: 'submitted',
-              submittedDate: 'June 12th, 2023 10:00 PM',
-            },
-            {
-              id: 'sub-1002',
-              studentName: 'Bob Johnson',
-              studentId: '1002',
-              status: 'late',
-              submittedDate: 'June 17th, 2023 09:30 PM',
-            },
-            {
-              id: 'sub-1003',
-              studentName: 'Charlie Davis',
-              studentId: '1003',
-              status: 'graded',
-              submittedDate: 'June 10th, 2023 08:15 PM',
-              grade: 100,
-              letterGrade: 'A',
-              gradePercentage: 100
-            },
-            {
-              id: 'sub-1004',
-              studentName: 'Diana Wilson',
-              studentId: '1004',
-              status: 'missing',
-              submittedDate: '',
-            },
-          ]);
+          // Set empty array - no default students
+          setSubmissions([]);
         }
       } catch (error) {
         console.error('Error loading submissions from API:', error);
@@ -243,26 +243,34 @@ const SubmissionsPage: React.FC = () => {
     // Find the submission by ID to get the studentId
     const submission = submissions.find(sub => sub.id === submissionId);
     if (submission) {
+      // Ensure studentId exists, default to submission id if not available
+      const studentId = submission.studentId || submission.id;
+      console.log(`Student ID for submission: ${studentId}`);
+      
       if (classId) {
         // Navigate to the student submission page using studentId with class context
-        navigate(`/class/${classId}/submissions/${assignmentId}/student/${submission.studentId}`, {
+        navigate(`/class/${classId}/submissions/${assignmentId}/student/${studentId}`, {
           state: {
             classId,
             className: assignment.className,
             section: assignment.section,
-            assignmentTitle: assignment.title
+            assignmentTitle: assignment.title,
+            submissionId: submission.id // Pass the submission ID explicitly
           }
         });
       } else {
         // Navigate to the student submission page using studentId
-        navigate(`/submissions/${assignmentId}/student/${submission.studentId}`, {
+        navigate(`/submissions/${assignmentId}/student/${studentId}`, {
           state: {
             className: assignment.className,
             section: assignment.section,
-            assignmentTitle: assignment.title
+            assignmentTitle: assignment.title,
+            submissionId: submission.id // Pass the submission ID explicitly
           }
         });
       }
+    } else {
+      console.error(`Submission with ID ${submissionId} not found`);
     }
   }, [navigate, assignmentId, submissions, classId, assignment.className, assignment.section, assignment.title]);
 

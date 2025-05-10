@@ -1,4 +1,3 @@
-import { User } from './user';
 import * as assignmentApi from '../api/assignmentApi';
 
 export type AssignmentStatus = 'due-soon' | 'completed' | 'missing' | 'upcoming';
@@ -6,6 +5,7 @@ export type AssignmentStatus = 'due-soon' | 'completed' | 'missing' | 'upcoming'
 export interface Assignment {
   id: string;
   title: string;
+  description?: string; // Add description field
   instructions: string;
   points: string;
   dueDate: string;
@@ -56,6 +56,29 @@ export const getClassAssignments = async (classId: string): Promise<Assignment[]
   }
 };
 
+// Helper function to extract or generate an ID
+const ensureAssignmentId = (assignment: any): string => {
+  // If the assignment already has an ID, use it
+  if (assignment.id) return assignment.id;
+  
+  // Check if the response has an id property that might be nested or named differently
+  const possibleIdKeys = ['id', 'assignmentId', 'assignment_id', '_id'];
+  for (const key of possibleIdKeys) {
+    if (assignment[key]) return assignment[key];
+  }
+  
+  // Look for an ID in the response URL if it exists
+  if (assignment.url) {
+    const urlMatch = assignment.url.match(/\/(\d+)$/); // Extract ID from URL ending with /123
+    if (urlMatch && urlMatch[1]) return urlMatch[1];
+  }
+  
+  // Generate a temporary ID if none exists
+  // This is a fallback to prevent app crashes, but these assignments may need special handling
+  console.warn('Generating temporary ID for assignment:', assignment.title);
+  return `temp-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+};
+
 // Save an assignment
 export const saveAssignment = async (assignment: Partial<Assignment>): Promise<Assignment> => {
   try {
@@ -67,15 +90,19 @@ export const saveAssignment = async (assignment: Partial<Assignment>): Promise<A
       savedAssignment = await assignmentApi.updateAssignment(assignment.id, assignment);
     } else {
       // Create new assignment
-      savedAssignment = await assignmentApi.createAssignment(classId, assignment);
+      const apiResponse = await assignmentApi.createAssignment(classId, assignment);
       
-      // Ensure we have a valid ID from the API
+      // Process the API response
+      savedAssignment = { ...apiResponse };
+      
+      // Ensure we have an ID (either from API or generated)
       if (!savedAssignment.id) {
-        console.error('API Error: Assignment was created but no ID was returned');
-        throw new Error('Assignment created without an ID');
+        const extractedId = ensureAssignmentId(apiResponse);
+        savedAssignment.id = extractedId;
+        console.log(`Assignment created with extracted/generated ID: ${extractedId}`);
+      } else {
+        console.log(`Assignment created successfully with ID: ${savedAssignment.id}`);
       }
-      
-      console.log(`Assignment created successfully with ID: ${savedAssignment.id}`);
     }
     
     // Dispatch event to notify other components

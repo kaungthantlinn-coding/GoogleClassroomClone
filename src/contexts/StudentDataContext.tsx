@@ -50,11 +50,22 @@ interface StudentDataProviderProps {
 }
 
 export const StudentDataProvider: React.FC<StudentDataProviderProps> = ({ children }) => {
-  // Clear localStorage on first load to remove default data
+  // Load data from localStorage or initialize with samples on first load
   useEffect(() => {
-    localStorage.removeItem('students');
-    localStorage.removeItem('submissions');
-    localStorage.removeItem('gradedSubmission');
+    const loadedStudents = localStorage.getItem('students');
+    const loadedSubmissions = localStorage.getItem('submissions');
+    
+    if (loadedStudents && loadedSubmissions) {
+      try {
+        setStudents(JSON.parse(loadedStudents));
+        setSubmissions(JSON.parse(loadedSubmissions));
+      } catch (e) {
+        console.error('Error parsing students or submissions from localStorage', e);
+        initializeWithSampleData();
+      }
+    } else {
+      initializeWithSampleData();
+    }
   }, []);
 
   // Initialize students with empty array
@@ -62,6 +73,99 @@ export const StudentDataProvider: React.FC<StudentDataProviderProps> = ({ childr
 
   // Initialize submissions with empty array  
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  
+  // Function to initialize with sample data
+  const initializeWithSampleData = () => {
+    const sampleStudents: Student[] = [
+      {
+        id: 'student-1',
+        name: 'Alex Johnson',
+        email: 'alex.j@example.com',
+        assignmentAvg: '92.5%',
+        participation: '100%',
+        finalGrade: '92.5%',
+      },
+      {
+        id: 'student-2',
+        name: 'Jamie Smith',
+        email: 'jamie.s@example.com',
+        assignmentAvg: '85.0%',
+        participation: '90%',
+        finalGrade: '85.0%',
+      },
+      {
+        id: 'student-3',
+        name: 'Morgan Lee',
+        email: 'morgan.l@example.com',
+        assignmentAvg: '78.4%',
+        participation: '80%',
+        finalGrade: '78.4%',
+      },
+      {
+        id: 'student-4',
+        name: 'Taylor Brooks',
+        email: 'taylor.b@example.com',
+        assignmentAvg: '94.7%',
+        participation: '100%',
+        finalGrade: '94.7%',
+      }
+    ];
+    
+    // Create sample submissions for these students
+    const sampleSubmissions: Submission[] = [
+      {
+        id: 'sub-student-1-1',
+        studentName: 'Alex Johnson',
+        studentId: 'student-1',
+        status: 'graded',
+        submittedDate: '2025-05-05T10:15:00Z',
+        grade: 92,
+        letterGrade: 'A-',
+        gradePercentage: 92
+      },
+      {
+        id: 'sub-student-2-1',
+        studentName: 'Jamie Smith',
+        studentId: 'student-2',
+        status: 'graded',
+        submittedDate: '2025-05-05T09:30:00Z',
+        grade: 85,
+        letterGrade: 'B',
+        gradePercentage: 85
+      },
+      {
+        id: 'sub-student-3-1',
+        studentName: 'Morgan Lee',
+        studentId: 'student-3',
+        status: 'graded',
+        submittedDate: '2025-05-05T11:45:00Z',
+        grade: 78,
+        letterGrade: 'C+',
+        gradePercentage: 78
+      },
+      {
+        id: 'sub-student-4-1',
+        studentName: 'Taylor Brooks',
+        studentId: 'student-4',
+        status: 'graded',
+        submittedDate: '2025-05-05T10:00:00Z',
+        grade: 95,
+        letterGrade: 'A',
+        gradePercentage: 95
+      }
+    ];
+    
+    setStudents(sampleStudents);
+    setSubmissions(sampleSubmissions);
+    
+    // Save to localStorage
+    localStorage.setItem('students', JSON.stringify(sampleStudents));
+    localStorage.setItem('submissions', JSON.stringify(sampleSubmissions));
+    
+    // Trigger grade sync event
+    const gradeUpdateEvent = new CustomEvent('gradesUpdated');
+    window.dispatchEvent(gradeUpdateEvent);
+  };
 
   // Save students to localStorage whenever they change
   useEffect(() => {

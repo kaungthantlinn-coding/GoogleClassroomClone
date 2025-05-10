@@ -95,11 +95,37 @@ export const getAssignment = async (assignmentId: string | number): Promise<Assi
  */
 export const createAssignment = async (courseId: string | number, assignment: Partial<Assignment>): Promise<Assignment> => {
   try {
+    console.log(`API: Attempting to create assignment for course ${courseId}`, assignment);
+    
     // POST: api/courses/{courseId}/assignments
-    const response = await assignmentApi.post<Assignment>(`/courses/${courseId}/assignments`, assignment);
-    return response.data;
+    const response = await assignmentApi.post(`/courses/${courseId}/assignments`, assignment);
+    
+    // Log the raw API response for debugging
+    console.log('API: Raw assignment creation response:', response.data);
+    
+    // Check if we got a valid response
+    if (!response.data) {
+      console.warn('API: Empty response when creating assignment');
+      // Return the original data with a temporary ID to prevent errors
+      return {
+        ...assignment as Assignment,
+        id: `temp-${Date.now()}`,
+        createdAt: new Date().toISOString()
+      };
+    }
+    
+    // Determine if the response contains what we need
+    const responseData = response.data;
+    const hasRequiredFields = responseData.id || responseData.assignmentId || responseData._id;
+    
+    if (!hasRequiredFields) {
+      console.warn('API: Response missing ID field, check the API documentation');
+    }
+    
+    return responseData;
   } catch (error) {
-    return handleApiError(error, 'Failed to create assignment');
+    console.error('API: Assignment creation failed', error);
+    return handleApiError(error, `Failed to create assignment for course ${courseId}`);
   }
 };
 
@@ -138,14 +164,86 @@ export const deleteAssignment = async (assignmentId: string | number): Promise<v
 };
 
 /**
- * Get all submissions for an assignment
+ * Get all submissions for an assignment (teacher only)
+ * GET: api/assignments/{assignmentId}/submissions
  */
 export const getSubmissions = async (assignmentId: string | number): Promise<any[]> => {
   try {
     const response = await assignmentApi.get(`/assignments/${assignmentId}/submissions`);
+    console.log('API response for submissions:', response.data);
     return response.data;
   } catch (error) {
-    return handleApiError(error, `Failed to fetch submissions for assignment ${assignmentId}`);
+    return handleApiError(error, 'Error getting assignment submissions');
+  }
+};
+
+/**
+ * Submit assignment (student only)
+ * POST: api/assignments/{assignmentId}/submissions
+ */
+export const submitAssignment = async (assignmentId: string | number, submission: any): Promise<any> => {
+  try {
+    const response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submission);
+    console.log('API response for submission:', response.data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'Error submitting assignment');
+  }
+};
+
+/**
+ * Get submission by ID
+ * GET: api/submissions/{id}
+ */
+export const getSubmission = async (submissionId: string | number): Promise<any> => {
+  try {
+    const response = await assignmentApi.get(`/submissions/${submissionId}`);
+    console.log('API response for submission details:', response.data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'Error getting submission details');
+  }
+};
+
+/**
+ * Grade submission (teacher only)
+ * PUT: api/submissions/{id}/grade
+ */
+export const gradeSubmission = async (submissionId: string | number, gradeData: any): Promise<any> => {
+  try {
+    const response = await assignmentApi.put(`/submissions/${submissionId}/grade`, gradeData);
+    console.log('API response for grading submission:', response.data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'Error grading submission');
+  }
+};
+
+/**
+ * Add or update feedback (teacher only)
+ * PUT: api/submissions/{id}/feedback
+ */
+export const addFeedback = async (submissionId: string | number, feedback: string): Promise<any> => {
+  try {
+    const response = await assignmentApi.put(`/submissions/${submissionId}/feedback`, { feedback });
+    console.log('API response for adding feedback:', response.data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'Error adding feedback to submission');
+  }
+};
+
+/**
+ * Unsubmit a submission (student only)
+ * DELETE: api/submissions/{id}/unsubmit
+ */
+export const unsubmitAssignment = async (submissionId: string | number): Promise<any> => {
+  try {
+    const response = await assignmentApi.delete(`/submissions/${submissionId}/unsubmit`);
+    console.log('API response for unsubmitting assignment:', response.data);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'Error unsubmitting assignment');
   }
 };
 
@@ -175,5 +273,10 @@ export default {
   updateAssignment,
   deleteAssignment,
   getSubmissions,
+  getSubmission,
+  submitAssignment,
+  gradeSubmission,
+  addFeedback,
+  unsubmitAssignment,
   saveSubmission
 }; 

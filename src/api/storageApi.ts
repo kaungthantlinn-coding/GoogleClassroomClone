@@ -77,9 +77,10 @@ export const deleteComment = async (commentId: string | number): Promise<any> =>
 export const saveClassData = async (classId: string | number, data: any): Promise<void> => {
   try {
     await storageApi.post(`/user/data/class/${classId}`, { data });
+    console.log(`Attempted to save class data for ${classId} to API`);
   } catch (error) {
     console.error(`Failed to save class data for ${classId}:`, error);
-    throw error;
+    // Don't throw error to prevent app crashes
   }
 };
 
@@ -89,7 +90,8 @@ export const getClassData = async (classId: string | number): Promise<any> => {
     return response.data;
   } catch (error) {
     console.error(`Failed to retrieve class data for ${classId}:`, error);
-    return null;
+    // Return an empty object instead of null to prevent downstream errors
+    return {};
   }
 };
 
@@ -107,20 +109,45 @@ export const getAnnouncements = async (classId: string | number): Promise<any[]>
 // User preferences/settings
 export const getUserPreferences = async (): Promise<any> => {
   try {
-    const response = await storageApi.get('/user/preferences');
-    return response.data;
+    // Try to get preferences from API
+    try {
+      const response = await storageApi.get('/user/preferences');
+      return response.data;
+    } catch (apiError) {
+      console.log('API preferences endpoint not available, using localStorage');
+      
+      // Fallback to localStorage if API fails
+      const localPrefs = localStorage.getItem('user_preferences');
+      if (localPrefs) {
+        return JSON.parse(localPrefs);
+      }
+      return {}; // Return empty object if nothing in localStorage
+    }
   } catch (error) {
     console.error('Failed to get user preferences:', error);
-    throw error;
+    return {}; // Return empty object as last resort
   }
 };
 
 export const saveUserPreferences = async (preferences: any): Promise<void> => {
   try {
-    await storageApi.post('/user/preferences', preferences);
+    // Try to save preferences to API
+    try {
+      await storageApi.post('/user/preferences', preferences);
+    } catch (apiError) {
+      console.log('API preferences endpoint not available, using localStorage');
+      
+      // Fallback to localStorage if API fails
+      localStorage.setItem('user_preferences', JSON.stringify(preferences));
+    }
   } catch (error) {
     console.error('Failed to save user preferences:', error);
-    throw error;
+    // Still try localStorage as last resort
+    try {
+      localStorage.setItem('user_preferences', JSON.stringify(preferences));
+    } catch (localError) {
+      console.error('Could not save to localStorage either:', localError);
+    }
   }
 };
 

@@ -383,7 +383,8 @@ const ClassworkPage = () => {
                           key={assignment.id ? `assignment-${assignment.id}` : `temp-assignment-${index}`}
                           id={assignment.id}
                           title={assignment.title}
-                          description={assignment.instructions}
+                          description={assignment.description}
+                          instructions={assignment.instructions}
                           points={assignment.points}
                           dueDate={assignment.dueDate ? assignment.dueDate : ''}
                           onEdit={handleEditAssignment}

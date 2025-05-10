@@ -1,0 +1,693 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, Star, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Button } from '../components/ui/button';
+import { Textarea } from '../components/ui/textarea';
+import { Input } from '../components/ui/input';
+import { Switch } from '../components/ui/switch';
+import { useStudentData, Student, Submission } from '../contexts/StudentDataContext';
+import * as storageApi from '../api/storageApi';
+import * as assignmentApi from '../api/assignmentApi';
+
+interface StudentSubmission {
+  id: string;
+  studentName: string;
+  studentId: string;
+  submittedDate: string;
+  gradedDate?: string;
+  grade?: number;
+  gradePercentage?: number;
+  letterGrade?: string;
+  feedback?: string;
+  graded?: boolean;
+  assignment: {
+    id: string;
+    title: string;
+    className: string;
+    section?: string;
+    points: string;
+  };
+  attachedFiles: {
+    name: string;
+    type: string;
+  }[];
+}
+
+// Helper function to get letter grade based on percentage
+const getLetterGrade = (percentage: number): string => {
+  if (percentage >= 90) return 'A';
+  if (percentage >= 80) return 'B';
+  if (percentage >= 70) return 'C';
+  if (percentage >= 60) return 'D';
+  return 'F';
+};
+
+// Helper function to get color for grade
+const getGradeColor = (letterGrade: string): string => {
+  switch (letterGrade) {
+    case 'A': return 'text-green-600';
+    case 'B': return 'text-blue-600';
+    case 'C': return 'text-yellow-600';
+    case 'D': return 'text-orange-600';
+    case 'F': return 'text-red-600';
+    default: return 'text-gray-600';
+  }
+};
+
+const StudentSubmissionPage: React.FC = () => {
+  const { assignmentId, studentId } = useParams<{ assignmentId: string; studentId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [submission, setSubmission] = useState<StudentSubmission | null>(null);
+  const [activeTab, setActiveTab] = useState<'grade' | 'comments'>('grade');
+  const [feedback, setFeedback] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [points, setPoints] = useState<string>('');
+  const [sendEmail, setSendEmail] = useState<boolean>(false);
+  const [showNoSubmission, setShowNoSubmission] = useState(false);
+  
+  // Get user role from sessionStorage only
+  const userRole = sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+  const isTeacher = userRole?.toLowerCase() === 'teacher' || !isStudent; // Default to teacher if role not set
+  
+  // Extract class information from location state
+  const classIdFromPath = location.pathname.match(/\\/class\\/([^\\/]+)/) ? 
+    location.pathname.match(/\\/class\\/([^\\/]+)/)![1] : null;
+  
+  const classIdFromState = location.state?.classId;
+  // Use only path or state for classId to avoid localStorage
+  const classId = classIdFromPath || classIdFromState || null;
+  
+  // Class data state with default values
+  const [classData, setClassData] = useState({
+    className: location.state?.className || "Class Name",
+    section: location.state?.section || "Section"
+  });
+  
+  // Get student data from context
+  const { students } = useStudentData();
+  const student = students?.find((s: Student) => s.id === studentId);
+  
+  // If the user is a student, redirect to their own submission page or show access denied
+  useEffect(() => {
+    if (isStudent) {
+      // Get the current user ID from sessionStorage
+      const currentUserId = sessionStorage.getItem('user_id');
+      
+      if (currentUserId && currentUserId !== studentId) {
+        // If the student is trying to access another student's submission, redirect to their own
+        console.log('Access denied: Student attempting to view another student\\'s submission');
+        setAccessDenied(true);
+      } else if (!currentUserId) {
+        // If no user ID is found, just show access denied
+        console.log('Access denied: No user ID found for student');
+        setAccessDenied(true);
+      }
+      // If the student is viewing their own submission, allow access
+    }
+  }, [isStudent, studentId]);
+
+  // After loading, if no submission, show the no submission message
+  useEffect(() => {
+    if (!loading && !submission) {
+      const timer = setTimeout(() => setShowNoSubmission(true), 1200); // 1.2s after loading
+      return () => clearTimeout(timer);
+    } else {
+      setShowNoSubmission(false);
+    }
+  }, [loading, submission]);
+  
+  // Load assignment and submission data
+  useEffect(() => {
+    const loadAssignmentData = async () => {
+      if (!assignmentId) return;
+      
+      setLoading(true);
+      try {
+        // Fetch assignment data from API
+        let assignmentTitle = location.state?.assignmentTitle || 'Assignment';
+        let assignmentPoints = '100';
+        let className = classData.className;
+        let section = classData.section;
+        
+        try {
+          // Fetch assignment data from API using assignmentApi
+          const assignmentData = await assignmentApi.getAssignment(assignmentId);
+          if (assignmentData) {
+            assignmentTitle = assignmentData.title || assignmentTitle;
+            assignmentPoints = assignmentData.points || assignmentPoints;
+            
+            // Use assignment class info if available
+            if (assignmentData.className) {
+              className = assignmentData.className;
+              section = assignmentData.section || section;
+            }
+          }
+        } catch (assignmentError) {
+          console.error('Error loading assignment details:', assignmentError);
+        }
+        
+        // Update class data state
+        setClassData({
+          className,
+          section
+        });
+        
+        // Now load the student submission from the API
+        await loadStudentSubmission(className, section, assignmentTitle, assignmentPoints);
+        
+      } catch (error) {
+        console.error('Error loading assignment data:', error);
+        setLoading(false);
+      }
+    };
+    
+    // Function to load the student submission from API
+    const loadStudentSubmission = async (
+      className: string, 
+      section: string, 
+      assignmentTitle: string, 
+      assignmentPoints: string
+    ) => {
+      try {
+        // Get submission data from API - first get all submissions for this assignment
+        console.log('Loading submissions for assignment:', assignmentId);
+        
+        if (!assignmentId) {
+          console.error('Assignment ID is required');
+          setLoading(false);
+          return;
+        }
+        
+        const submissionsData = await assignmentApi.getSubmissions(assignmentId);
+        console.log('API submissions for assignment:', submissionsData);
+        
+        // Find the specific student submission
+        const apiSubmission = submissionsData.find((sub: any) => 
+          sub.userId?.toString() === studentId || 
+          sub.submissionId?.toString() === location.state?.submissionId
+        );
+        
+        console.log('Found student submission from API:', apiSubmission);
+        
+        if (apiSubmission) {
+          // Get student data from context or create default
+          const studentData = student || {
+            id: apiSubmission.userId?.toString() || studentId || 'unknown',
+            name: apiSubmission.userName || 'Unknown Student'
+          };
+          
+          // Create a combined submission object with API data
+          const submissionData: StudentSubmission = {
+            id: apiSubmission.submissionId?.toString() || 'unknown',
+            studentName: apiSubmission.userName || studentData.name,
+            studentId: apiSubmission.userId?.toString() || studentData.id,
+            submittedDate: apiSubmission.submittedAt || '',
+            gradedDate: apiSubmission.gradedDate || '',
+            grade: apiSubmission.grade,
+            feedback: apiSubmission.feedback || '',
+            graded: apiSubmission.graded || false,
+            assignment: {
+              id: assignmentId || '',
+              title: assignmentTitle || 'Assignment',
+              className,
+              section,
+              points: assignmentPoints
+            },
+            attachedFiles: apiSubmission.files || [{
+              name: 'assignment.pdf',
+              type: 'application/pdf'
+            }]
+          };
+          
+          // Calculate grade percentage and letter grade
+          if (submissionData.grade !== undefined && assignmentPoints) {
+            const pointsPossible = parseInt(assignmentPoints);
+            if (!isNaN(pointsPossible) && pointsPossible > 0) {
+              const percentage = Math.round((submissionData.grade / pointsPossible) * 100);
+              submissionData.gradePercentage = percentage;
+              submissionData.letterGrade = getLetterGrade(percentage);
+            }
+          }
+          
+          console.log('Created submission data object:', submissionData);
+          setSubmission(submissionData);
+          setFeedback(submissionData.feedback || '');
+          
+          // Store points for grading if we have them
+          if (submissionData.grade !== undefined) {
+            setPoints(submissionData.grade.toString());
+          }
+        } else {
+          // Create an empty submission if none found
+          console.log('No submission found for student, creating empty record');
+          
+          setSubmission({
+            id: `submission-${Date.now()}`,
+            studentName: student?.name || 'Unknown Student',
+            studentId: studentId || 'unknown',
+            submittedDate: '',
+            graded: false,
+            assignment: {
+              id: assignmentId || '',
+              title: assignmentTitle || 'Assignment',
+              className,
+              section,
+              points: assignmentPoints
+            },
+            attachedFiles: []
+          });
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading student submission:', error);
+        setLoading(false);
+      }
+    };
+    
+    if (assignmentId) {
+      loadAssignmentData();
+    }
+  }, [assignmentId, studentId, student, classId, location.state]);
+  
+  // Handle back to submissions page
+  const handleBackToSubmissions = useCallback(() => {
+    if (classId) {
+      // Navigate back to submissions with class context
+      navigate(`/class/${classId}/submissions/${assignmentId}`, {
+        state: {
+          classId: classId,
+          className: classData.className,
+          section: classData.section,
+          assignmentTitle: submission?.assignment.title
+        }
+      });
+    } else {
+      // Navigate back to submissions without class context
+      navigate(`/submissions/${assignmentId}`, {
+        state: {
+          className: classData.className,
+          section: classData.section,
+          assignmentTitle: submission?.assignment.title
+        }
+      });
+    }
+  }, [navigate, assignmentId, classId, classData, submission]);
+  
+  // Handle file download
+  const handleFileDownload = useCallback((fileName: string) => {
+    console.log(`Download file: ${fileName}`);
+    // In a real implementation, use an API to fetch and download the file
+    // For now, show a message
+    alert(`Downloading file: ${fileName}`);
+  }, []);
+  
+  // Handle grade submission
+  const handleSubmitGrade = useCallback(async () => {
+    if (submission && assignmentId) {
+      try {
+        setLoading(true);
+        
+        // Get assignment points as a number
+        const maxPoints = parseInt(submission.assignment.points);
+        
+        // Convert entered points to a number
+        const gradeValue = parseInt(points);
+        if (isNaN(gradeValue)) {
+          alert('Please enter a valid number for points');
+          setLoading(false);
+          return;
+        }
+        
+        // Validate points range
+        if (gradeValue < 0 || gradeValue > maxPoints) {
+          alert(`Points must be between 0 and ${maxPoints}`);
+          setLoading(false);
+          return;
+        }
+        
+        // Create grade data
+        const gradeData = {
+          grade: gradeValue,
+          feedback: feedback,
+          gradedDate: new Date().toISOString()
+        };
+        
+        try {
+          // Call API to grade submission
+          await assignmentApi.gradeSubmission(submission.id, gradeData);
+          
+          // Update local state
+          setSubmission({
+            ...submission,
+            grade: gradeValue,
+            gradePercentage: Math.round((gradeValue / maxPoints) * 100),
+            letterGrade: getLetterGrade(Math.round((gradeValue / maxPoints) * 100)),
+            feedback: feedback,
+            graded: true,
+            gradedDate: new Date().toISOString()
+          });
+          
+          // Optionally sync with API for context
+          // syncGradeData();
+          
+          alert('Grade submitted successfully!');
+          
+          // Navigate back to submissions page if the user chose to
+          if (sendEmail) {
+            alert('Email will be sent to student (not implemented in demo)');
+          }
+        } catch (apiError) {
+          console.error('API error while grading submission:', apiError);
+          
+          // For demo, update UI even if API fails
+          setSubmission({
+            ...submission,
+            grade: gradeValue,
+            gradePercentage: Math.round((gradeValue / maxPoints) * 100),
+            letterGrade: getLetterGrade(Math.round((gradeValue / maxPoints) * 100)),
+            feedback: feedback,
+            graded: true,
+            gradedDate: new Date().toISOString()
+          });
+          
+          alert('Grade saved locally (API error occurred)');
+        }
+      } catch (error) {
+        console.error('Error submitting grade:', error);
+        alert('Failed to submit grade');
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [submission, assignmentId, points, feedback, sendEmail]);
+  
+  // If still loading, show loading state
+  if (loading) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex items-center text-blue-600 mb-6">
+          <ChevronLeft className="h-5 w-5 mr-1" />
+          <button onClick={handleBackToSubmissions}>Back to submissions</button>
+        </div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Loading submission...</span>
+        </div>
+      </div>
+    );
+  }
+  
+  // If access denied, show message
+  if (accessDenied) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex items-center text-blue-600 mb-6">
+          <ChevronLeft className="h-5 w-5 mr-1" />
+          <button onClick={() => navigate(-1)}>Back</button>
+        </div>
+        <div className="bg-red-50 border border-red-200 p-6 rounded-lg">
+          <div className="flex items-center text-red-700 mb-2">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            <h2 className="text-xl font-semibold">Access Denied</h2>
+          </div>
+          <p className="text-red-700">You do not have permission to view this submission.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If no submission yet but assignment exists
+  if (showNoSubmission && !submission?.submittedDate) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex items-center text-blue-600 mb-6">
+          <ChevronLeft className="h-5 w-5 mr-1" />
+          <button onClick={handleBackToSubmissions}>Back to submissions</button>
+        </div>
+        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg">
+          <div className="flex items-center text-yellow-700 mb-2">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            <h2 className="text-xl font-semibold">No Submission Yet</h2>
+          </div>
+          <p className="text-yellow-700">This student has not submitted anything for this assignment yet.</p>
+          
+          {/* Teacher options for grading anyway */}
+          {isTeacher && (
+            <div className="mt-4">
+              <Button onClick={() => setActiveTab('grade')} variant="outline">
+                Grade Anyway
+              </Button>
+            </div>
+          )}
+        </div>
+        
+        {/* Grade form for teachers who want to grade even without submission */}
+        {isTeacher && activeTab === 'grade' && (
+          <div className="bg-white border rounded-lg p-6 mt-6">
+            <h2 className="text-xl font-semibold mb-4">Grade Assignment</h2>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Points</label>
+              <div className="flex items-center">
+                <Input
+                  type="number"
+                  min="0"
+                  max={submission?.assignment?.points || 100}
+                  value={points}
+                  onChange={(e) => setPoints(e.target.value)}
+                  className="w-20 mr-2"
+                />
+                <span className="text-gray-500">/ {submission?.assignment?.points || 100}</span>
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Feedback</label>
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                className="w-full h-32"
+                placeholder="Add feedback for the student..."
+              />
+            </div>
+            <div className="flex items-center mb-6">
+              <Switch
+                checked={sendEmail}
+                onCheckedChange={setSendEmail}
+                id="email-notification"
+              />
+              <label htmlFor="email-notification" className="ml-2 text-gray-700">
+                Send email notification to student
+              </label>
+            </div>
+            <Button onClick={handleSubmitGrade} disabled={loading}>
+              {loading ? 'Saving...' : 'Submit Grade'}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Show the submission details
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex items-center text-blue-600 mb-6">
+        <ChevronLeft className="h-5 w-5 mr-1" />
+        <button onClick={handleBackToSubmissions}>Back to submissions</button>
+      </div>
+      
+      {/* Submission header */}
+      <div className="bg-white border rounded-lg p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">{submission?.assignment.title}</h1>
+            <div className="text-gray-500 text-sm flex items-center gap-2">
+              <span>{submission?.assignment.className}</span>
+              {submission?.assignment.section && (
+                <>
+                  <span className="text-gray-400">•</span>
+                  <span>{submission?.assignment.section}</span>
+                </>
+              )}
+              <span className="text-gray-400">•</span>
+              <span>{submission?.assignment.points} points</span>
+            </div>
+          </div>
+          
+          {/* Show grade or status */}
+          <div className="mt-4 sm:mt-0">
+            {submission?.graded ? (
+              <div className="flex flex-col items-end">
+                <div className="text-3xl font-bold">
+                  {submission.grade} / {submission.assignment.points}
+                </div>
+                {submission.letterGrade && (
+                  <div className={`text-xl font-bold ${getGradeColor(submission.letterGrade)}`}>
+                    {submission.letterGrade}
+                  </div>
+                )}
+                {submission.gradePercentage && (
+                  <div className="text-gray-500 text-sm">{submission.gradePercentage}%</div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <div className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {submission?.submittedDate ? 'Submitted' : 'Not submitted'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Student info */}
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <div className="flex items-center mb-2">
+            <div className="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center font-semibold mr-2">
+              {submission?.studentName?.[0] || '?'}
+            </div>
+            <div>
+              <div className="font-medium">{submission?.studentName}</div>
+              <div className="text-xs text-gray-500">ID: {submission?.studentId}</div>
+            </div>
+          </div>
+          <div className="text-sm text-gray-600">
+            {submission?.submittedDate && (
+              <div>Submitted: {new Date(submission.submittedDate).toLocaleString()}</div>
+            )}
+            {submission?.gradedDate && (
+              <div>Graded: {new Date(submission.gradedDate).toLocaleString()}</div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Submission files */}
+      {submission?.attachedFiles && submission.attachedFiles.length > 0 && (
+        <div className="bg-white border rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Submission Files</h2>
+          <div className="space-y-2">
+            {submission.attachedFiles.map((file, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="bg-gray-200 w-10 h-10 rounded-lg flex items-center justify-center mr-3">
+                    <span className="text-gray-600 text-xs">📄</span>
+                  </div>
+                  <div>
+                    <div className="font-medium">{file.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {file.type || 'Document'}
+                    </div>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleFileDownload(file.name)}
+                  className="flex items-center text-blue-600"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Grading section for teachers */}
+      {isTeacher && (
+        <div className="bg-white border rounded-lg p-6">
+          <div className="flex border-b mb-6">
+            <button
+              className={`pb-3 px-4 ${
+                activeTab === 'grade'
+                  ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
+                  : 'text-gray-500'
+              }`}
+              onClick={() => setActiveTab('grade')}
+            >
+              Grade
+            </button>
+            <button
+              className={`pb-3 px-4 ${
+                activeTab === 'comments'
+                  ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
+                  : 'text-gray-500'
+              }`}
+              onClick={() => setActiveTab('comments')}
+            >
+              Comments
+            </button>
+          </div>
+          
+          {activeTab === 'grade' && (
+            <div>
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-2">Points</label>
+                <div className="flex items-center">
+                  <Input
+                    type="number"
+                    min="0"
+                    max={submission?.assignment?.points || 100}
+                    value={points}
+                    onChange={(e) => setPoints(e.target.value)}
+                    className="w-20 mr-2"
+                  />
+                  <span className="text-gray-500">/ {submission?.assignment?.points || 100}</span>
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-2">Feedback</label>
+                <Textarea
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  className="w-full h-32"
+                  placeholder="Add feedback for the student..."
+                />
+              </div>
+              <div className="flex items-center mb-6">
+                <Switch
+                  checked={sendEmail}
+                  onCheckedChange={setSendEmail}
+                  id="email-notification"
+                />
+                <label htmlFor="email-notification" className="ml-2 text-gray-700">
+                  Send email notification to student
+                </label>
+              </div>
+              <Button onClick={handleSubmitGrade} disabled={loading}>
+                {loading ? 'Saving...' : 'Submit Grade'}
+              </Button>
+            </div>
+          )}
+          
+          {activeTab === 'comments' && (
+            <div className="text-gray-500 text-center py-6">
+              Comments feature coming soon.
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Feedback section for students */}
+      {isStudent && submission?.graded && (
+        <div className="bg-white border rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">Instructor Feedback</h2>
+          <div className="bg-gray-50 p-4 rounded-lg mb-4">
+            {submission.feedback ? (
+              <p className="whitespace-pre-line">{submission.feedback}</p>
+            ) : (
+              <p className="text-gray-500 italic">No feedback provided.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default StudentSubmissionPage;
