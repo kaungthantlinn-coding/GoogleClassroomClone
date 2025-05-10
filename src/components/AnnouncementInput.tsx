@@ -1,15 +1,15 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, Youtube, Upload, Link2, Users, Image, PaperclipIcon, X, ChevronDown, Search, MessageSquare, Clock } from 'lucide-react';
 import { ClassDataContext } from '../pages/ClassPage';
-import { saveAnnouncement } from '../types/announcement';
 import { useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useQuery } from '@tanstack/react-query';
 import { Course } from '../types/course';
 import { getCourses } from '../api/courseApi';
+import { Announcement, Attachment } from '../types/announcement';
 
 // Custom type for the dropdown courses
-interface DropdownCourse extends Partial<Course> {
+interface DropdownCourse {
   id: string;
   name: string;
   section: string;
@@ -18,19 +18,25 @@ interface DropdownCourse extends Partial<Course> {
   textColor?: string;
   isDefault?: boolean;
   avatar?: string;
+  courseId?: number;
+  courseGuid?: string;
+  enrollmentCode?: string;
 }
 
-interface Announcement {
+// Simple attachment type that matches the UI requirements
+interface SimpleAttachment {
   id: string;
-  classId: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorAvatar?: string;
-  createdAt: string;
-  attachments: { id: string; type: string; url: string; name: string }[];
-  comments: any[];
+  type: string;
+  url: string;
+  name: string;
+  size?: number;
+  uploadDate?: string;
 }
+
+// Type for announcement input data
+type AnnouncementInputData = Omit<Announcement, 'id' | 'createdAt' | 'updatedAt' | 'attachments'> & {
+  attachments: SimpleAttachment[];
+};
 
 const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: () => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -44,6 +50,8 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   const [searchTerm, setSearchTerm] = useState('');
   const [showAnnouncementDropdown, setShowAnnouncementDropdown] = useState(false);
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
+  const [defaultCourses, setDefaultCourses] = useState<DropdownCourse[]>([]);
+  const [userCourses, setUserCourses] = useState<DropdownCourse[]>([]);
   
   const classData = useContext(ClassDataContext);
   const { classId } = useParams<{ classId: string }>();
@@ -55,25 +63,29 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   const announcementDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch available classes
-  const { data: courses } = useQuery<DropdownCourse[]>({
+  const { data: courses, isLoading: loadingCourses } = useQuery<Course[]>({
     queryKey: ['courses'],
-    queryFn: async () => {
-      try {
-        // Fetch courses from the API
-        const coursesData = await getCourses();
-        
-        // Convert Course[] to DropdownCourse[]
-        return coursesData.map(course => ({
-          ...course,
-          avatar: course.name ? course.name[0].toUpperCase() : 'C',
-          isDefault: false
-        }));
-      } catch (error) {
-        console.error('Error fetching courses:', error);
-        return [];
-      }
-    },
+    queryFn: () => getCourses()
   });
+
+  // Debug courses object - Use for troubleshooting only
+  useEffect(() => {
+    if (courses) {
+      console.log("Raw courses data:", JSON.stringify(courses, null, 2));
+    }
+  }, [courses]);
+  
+  // Update state when courses data is available
+  useEffect(() => {
+    if (courses) {
+      console.log("Courses data for announcements:", courses);
+      const defaultCoursesList = courses.filter((course: Course) => course.isDefault);
+      const userCoursesList = courses.filter((course: Course) => !course.isDefault);
+      
+      setDefaultCourses(defaultCoursesList);
+      setUserCourses(userCoursesList);
+    }
+  }, [courses]);
 
   // Set current class as selected on initial load
   useEffect(() => {
@@ -84,55 +96,33 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
     
     console.log("Current classId from URL params:", classId, typeof classId);
     
-    // Always set the current classId in selectedClasses for immediate use
-    setSelectedClasses([classId]);
+    // Determine if the current ID is a GUID
+    const isGuid = typeof classId === 'string' && classId.includes('-');
+    console.log(`Class ID from URL is a ${isGuid ? 'GUID' : 'numeric ID'}: ${classId}`);
     
-    // Also check if courses are loaded
-    if (courses && courses.length > 0) {
-      console.log("Available courses:", JSON.stringify(courses.map(c => ({
-        id: c.id,
-        courseId: c.courseId,
-        courseGuid: c.courseGuid,
-        name: c.name
-      }))));
+    // Wait for courses to be loaded
+    if (courses) {
+      // Look up the course to get the proper ID format
+      const course = courses.find((c: Course) => 
+        c.id === classId || 
+        c.courseId?.toString() === classId || 
+        c.courseGuid === classId
+      );
       
-      // Determine if the current ID is a GUID
-      const isGuid = typeof classId === 'string' && classId.includes('-');
-      console.log(`Class ID from URL is a ${isGuid ? 'GUID' : 'numeric ID'}: ${classId}`);
-      
-      // Try to find by exact match
-      let currentClass = courses.find(c => c.id === classId);
-      console.log("Found by exact ID match:", currentClass ? JSON.stringify(currentClass) : "undefined");
-      
-      // Try to find by numeric ID
-      if (!currentClass) {
-        currentClass = courses.find(c => c.courseId?.toString() === classId);
-        console.log("Found by numeric ID:", currentClass ? JSON.stringify(currentClass) : "undefined");
+      if (course) {
+        // Use courseId as the preferred ID format
+        const courseIdToUse = getCourseIdValue(course);
+        console.log(`Found course in API data, using ID: ${courseIdToUse}`);
+        setSelectedClasses([courseIdToUse]);
+      } else {
+        // Fallback to the URL parameter
+        console.log(`Course not found in API data, using URL parameter: ${classId}`);
+        setSelectedClasses([classId]);
       }
-      
-      // Try to find by GUID
-      if (!currentClass) {
-        currentClass = courses.find(c => c.courseGuid === classId);
-        console.log("Found by GUID:", currentClass ? JSON.stringify(currentClass) : "undefined");
-      }
-      
-      // If found by any method, use the appropriate ID based on the API endpoint requirements
-      if (currentClass) {
-        let idToUse;
-        
-        if (isGuid) {
-          // If URL has GUID, prefer to use the GUID for consistency
-          idToUse = currentClass.courseGuid || classId;
-          console.log("Using GUID for consistency:", idToUse);
-        } else {
-          // Otherwise use the numeric ID or fallback to the course's id field
-          idToUse = currentClass.courseId?.toString() || currentClass.id;
-          console.log("Using numeric ID for consistency:", idToUse);
-        }
-        
-        console.log("Setting selected class to:", idToUse);
-        setSelectedClasses([idToUse]);
-      }
+    } else {
+      // If courses aren't loaded yet, use the URL parameter
+      console.log(`Courses not loaded yet, using URL parameter: ${classId}`);
+      setSelectedClasses([classId]);
     }
   }, [classId, courses]);
 
@@ -160,7 +150,7 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
       setSearchTerm('');
     }
   }, [showClassDropdown]);
-  
+
   // Load recent announcements
   useEffect(() => {
     const loadRecentAnnouncements = async () => {
@@ -188,7 +178,7 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
     loadRecentAnnouncements();
     
   }, [classId]);
-  
+
   // Handle click outside to close announcement dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -242,13 +232,12 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
       
       // Import courseApi to get the actual course if needed
       import('../api/courseApi')
-        .then(async (courseApi) => {
+        .then(async () => {
           let targetCourseId = currentClassId;
           
           // If using a GUID, ensure we have the right endpoint format
           if (isGuid) {
             console.log("Using GUID format for API call");
-            // No need to transform the ID, the announcementApi will handle it
           } else {
             console.log("Using numeric ID format for API call");
             // For numeric IDs, we can use them directly as well
@@ -261,7 +250,12 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
             authorId: user.id || "1004", // Ensure we have a valid user ID
             authorName: user.name || "User",
             authorAvatar: user.avatar,
-            attachments: attachments.length > 0 ? attachments : []
+            attachments: attachments.length > 0 ? attachments.map(att => ({
+              ...att,
+              size: 0,
+              uploadDate: new Date().toISOString()
+            })) : [],
+            comments: [] // Adding required comments property to match the Announcement interface
           };
           
           console.log("Announcement data before API call:", JSON.stringify(announcementData));
@@ -337,6 +331,54 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
     }
   };
 
+  // Selected courses section rendering - using real data
+  const renderSelectedCoursesPills = () => {
+    if (selectedClasses.length <= 1) return null;
+    
+    console.log("Rendering course pills. Selected classes:", selectedClasses);
+    console.log("Available courses:", courses);
+    
+    return (
+      <div className="flex flex-wrap gap-2 mb-4 ml-11">
+        {selectedClasses.map(id => {
+          // Find the course matching either id, courseId, or courseGuid
+          const course = courses && courses.find((c: Course) => 
+            c.id === id || 
+            c.courseId?.toString() === id || 
+            c.courseGuid === id
+          );
+          
+          // Debug
+          console.log(`Looking for course with ID ${id}:`, course);
+          
+          // If course not found, don't render the pill
+          if (!course) return null;
+          
+          return (
+            <div key={id} className="flex items-center bg-[#e8f0fe] text-[#1967d2] rounded-full px-3 py-1 text-xs">
+              <span>{course.name}</span>
+              <button 
+                className="ml-2 text-[#1967d2] hover:text-[#1a73e8]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedClasses(prev => prev.filter(cid => cid !== id));
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Get course ID that matches how we're storing IDs
+  const getCourseIdValue = (course: DropdownCourse | Course): string => {
+    // Prioritize courseId (numeric) as it seems to be what your data uses
+    return course.courseId?.toString() || course.id || course.courseGuid || '';
+  };
+  
   // Toggle class selection
   const toggleClassSelection = (courseId: string, e?: React.MouseEvent | React.ChangeEvent) => {
     // If this was triggered by clicking the checkbox directly, stop propagation
@@ -344,58 +386,102 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
       e.stopPropagation();
     }
     
+    // Ensure we have a valid course ID
+    if (!courseId) {
+      console.error("Tried to toggle selection with invalid course ID");
+      return;
+    }
+    
+    console.log(`Toggling selection for course ID: ${courseId}`);
+    
     setSelectedClasses(prev => {
-      if (prev.includes(courseId)) {
-        return prev.filter(id => id !== courseId);
+      // Create a copy of the array to avoid issues with reference equality
+      const currentSelection = [...prev];
+      
+      if (currentSelection.includes(courseId)) {
+        console.log(`Removing course ID ${courseId} from selection`);
+        const newSelection = currentSelection.filter(id => id !== courseId);
+        console.log("Updated selection:", newSelection);
+        return newSelection;
       } else {
-        return [...prev, courseId];
+        console.log(`Adding course ID ${courseId} to selection`);
+        currentSelection.push(courseId);
+        console.log("Updated selection:", currentSelection);
+        return currentSelection;
       }
     });
   };
 
   // Select or deselect all classes
   const selectAllClasses = () => {
-    if (courses && courses.length > 0) {
-      if (selectedClasses.length === courses.length) {
+    if (defaultCourses.length > 0 || userCourses.length > 0) {
+      // Get all available course IDs
+      const allCourseIds = [
+        ...defaultCourses.map(course => getCourseIdValue(course)),
+        ...userCourses.map(course => getCourseIdValue(course))
+      ];
+      
+      console.log("All available course IDs for selection:", allCourseIds);
+      
+      if (selectedClasses.length === allCourseIds.length) {
         // Deselect all
+        console.log("Deselecting all courses");
         setSelectedClasses([]);
       } else {
         // Select all
-        setSelectedClasses(courses.map(course => course.id));
+        console.log("Selecting all courses:", allCourseIds);
+        setSelectedClasses(allCourseIds);
       }
     }
   };
 
   // Get selected class display
   const getSelectedClassDisplay = () => {
-    if (!courses || selectedClasses.length === 0) {
-      return classData.className || 'Select a class';
+    if ((!defaultCourses.length && !userCourses.length) || selectedClasses.length === 0) {
+      return classData.name || 'Select a class';
     }
     
     if (selectedClasses.length > 1) {
       return `${selectedClasses.length} classes selected`;
     }
     
-    const selectedClass = courses.find(c => c.id === selectedClasses[0]);
-    if (selectedClass) {
-      return `${selectedClass.name} ${selectedClass.section}`;
+    // Get class names for selected classes
+    let summaryText = '';
+    
+    if (selectedClasses.length === 1) {
+      // Handle single selection
+      const selectedClass = [...defaultCourses, ...userCourses].find((cls: DropdownCourse) => cls.id === selectedClasses[0]);
+      if (selectedClass) {
+        summaryText = selectedClass.name || 'Selected Class';
+      } else {
+        summaryText = 'Selected Class';
+      }
     }
     
-    return classData.className || 'Select a class';
+    return summaryText;
   };
 
   // Filter courses by search term
   const getFilteredCourses = () => {
-    if (!courses) return { defaultCourses: [], userCourses: [] };
+    if (!defaultCourses.length && !userCourses.length) return { defaultCourses: [], userCourses: [] };
     
-    const filtered = courses.filter(course => {
-      const searchString = `${course.name} ${course.section}`.toLowerCase();
+    console.log("Filtering courses with search term:", searchTerm);
+    console.log("Available defaultCourses:", defaultCourses);
+    console.log("Available userCourses:", userCourses);
+    
+    const filteredDefaultCourses = defaultCourses.filter((course: DropdownCourse) => {
+      const searchString = `${course.name || ''} ${course.section || ''}`.toLowerCase();
+      return searchString.includes(searchTerm.toLowerCase());
+    });
+    
+    const filteredUserCourses = userCourses.filter((course: DropdownCourse) => {
+      const searchString = `${course.name || ''} ${course.section || ''}`.toLowerCase();
       return searchString.includes(searchTerm.toLowerCase());
     });
     
     return {
-      defaultCourses: filtered.filter(c => c.isDefault),
-      userCourses: filtered.filter(c => !c.isDefault)
+      defaultCourses: filteredDefaultCourses,
+      userCourses: filteredUserCourses
     };
   };
 
@@ -406,8 +492,8 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
     }
   }, [isExpanded]);
 
-  const { defaultCourses, userCourses } = getFilteredCourses();
-  const hasUserCourses = userCourses.length > 0;
+  // Get filtered courses for display
+  const { defaultCourses: filteredDefaultCourses, userCourses: filteredUserCourses } = getFilteredCourses();
 
   // Format date for announcement display
   const formatAnnouncementDate = (dateString: string) => {
@@ -428,11 +514,19 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   
   // Get class name by ID
   const getClassNameById = (classId: string) => {
-    if (!courses) return 'Unknown Class';
-    const course = courses.find(c => c.id === classId);
+    if (!defaultCourses.length && !userCourses.length) return 'Unknown Class';
+    const allCourses = [...defaultCourses, ...userCourses];
+    const course = allCourses.find((c: DropdownCourse) => c.id === classId);
     return course ? course.name : 'Unknown Class';
   };
   
+  // Render selected courses pills debug
+  useEffect(() => {
+    if (selectedClasses.length > 0) {
+      console.log("Current selected classes:", selectedClasses);
+    }
+  }, [selectedClasses]);
+
   return (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6 relative">
       {!isExpanded ? (
@@ -538,44 +632,49 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
                           <input
                             type="checkbox"
                             className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                            checked={courses && courses.length > 0 && selectedClasses.length === courses.length}
-                            onChange={selectAllClasses}
-                            onClick={(e) => e.stopPropagation()}
+                            checked={defaultCourses.length > 0 && userCourses.length > 0 && 
+                              selectedClasses.length === defaultCourses.length + userCourses.length}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              selectAllClasses();
+                            }}
                           />
                           <span className="font-medium">Select All</span>
                         </label>
                       </div>
                 
                       {/* Default classes */}
-                      {defaultCourses.length > 0 && (
+                      {filteredDefaultCourses.length > 0 && (
                         <>
                           <div className="px-3 py-2 bg-gray-100 text-xs font-medium text-gray-500 uppercase sticky top-0">
                             DEFAULT CLASSES
                           </div>
-                          {defaultCourses.map(course => (
+                          {filteredDefaultCourses.map(course => (
                             <div 
                               key={course.id} 
                               className="p-2 hover:bg-gray-100 cursor-pointer"
-                              onClick={() => toggleClassSelection(course.id)}
+                              onClick={() => toggleClassSelection(getCourseIdValue(course))}
                             >
                               <label className="flex items-center space-x-3 cursor-pointer w-full">
                                 <input
                                   type="checkbox"
                                   className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                  checked={selectedClasses.includes(course.id)}
-                                  onChange={(e) => toggleClassSelection(course.id, e)}
-                                  onClick={(e) => e.stopPropagation()}
+                                  checked={selectedClasses.includes(getCourseIdValue(course))}
+                                  onChange={(e) => {
+                                    e.stopPropagation(); 
+                                    toggleClassSelection(getCourseIdValue(course), e);
+                                  }}
                                 />
                                 <div className="flex items-center space-x-2">
                                   <div 
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                                    style={{ backgroundColor: course.color }}
+                                    style={{ backgroundColor: course.color || '#1a73e8' }}
                                   >
-                                    {course.avatar}
+                                    {course.avatar || course.name?.charAt(0) || 'C'}
                                   </div>
                                   <div>
-                                    <div className="font-medium">{course.name}</div>
-                                    <div className="text-sm text-gray-500">{course.section}</div>
+                                    <div className="font-medium">{course.name || 'Unnamed Course'}</div>
+                                    <div className="text-sm text-gray-500">{course.section || 'No section'}</div>
                                   </div>
                                 </div>
                               </label>
@@ -585,35 +684,37 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
                       )}
                 
                       {/* User courses */}
-                      {userCourses.length > 0 && (
+                      {filteredUserCourses.length > 0 && (
                         <>
                           <div className="px-3 py-2 bg-gray-100 text-xs font-medium text-gray-500 uppercase sticky top-0">
                             YOUR CLASSES
                           </div>
-                          {userCourses.map(course => (
+                          {filteredUserCourses.map(course => (
                             <div 
                               key={course.id} 
                               className="p-2 hover:bg-gray-100 cursor-pointer"
-                              onClick={() => toggleClassSelection(course.id)}
+                              onClick={() => toggleClassSelection(getCourseIdValue(course))}
                             >
                               <label className="flex items-center space-x-3 cursor-pointer w-full">
                                 <input
                                   type="checkbox"
                                   className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                  checked={selectedClasses.includes(course.id)}
-                                  onChange={(e) => toggleClassSelection(course.id, e)}
-                                  onClick={(e) => e.stopPropagation()}
+                                  checked={selectedClasses.includes(getCourseIdValue(course))}
+                                  onChange={(e) => {
+                                    e.stopPropagation(); 
+                                    toggleClassSelection(getCourseIdValue(course), e);
+                                  }}
                                 />
                                 <div className="flex items-center space-x-2">
                                   <div 
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                                    style={{ backgroundColor: course.color }}
+                                    style={{ backgroundColor: course.color || '#4285f4' }}
                                   >
-                                    {course.avatar}
+                                    {course.avatar || course.name?.charAt(0) || 'C'}
                                   </div>
                                   <div>
-                                    <div className="font-medium">{course.name}</div>
-                                    <div className="text-sm text-gray-500">{course.section}</div>
+                                    <div className="font-medium">{course.name || 'Unnamed Course'}</div>
+                                    <div className="text-sm text-gray-500">{course.section || 'No section'}</div>
                                   </div>
                                 </div>
                               </label>
@@ -638,30 +739,8 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
             </div>
           </div>
 
-          {/* Selected classes pills */}
-          {selectedClasses.length > 1 && courses && (
-            <div className="flex flex-wrap gap-2 mb-4 ml-11">
-              {selectedClasses.map(id => {
-                const course = courses.find(c => c.id === id);
-                if (!course) return null;
-                
-                return (
-                  <div key={id} className="flex items-center bg-[#e8f0fe] text-[#1967d2] rounded-full px-3 py-1 text-xs">
-                    <span>{course.name}</span>
-                    <button 
-                      className="ml-2 text-[#1967d2] hover:text-[#1a73e8]"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedClasses(prev => prev.filter(cid => cid !== id));
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Selected classes pills - Using real data */}
+          {renderSelectedCoursesPills()}
 
           {/* Text Input */}
           <div className="bg-[#f8f9fa] rounded-lg p-4 mb-4 min-h-[120px]">

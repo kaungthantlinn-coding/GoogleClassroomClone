@@ -11,6 +11,8 @@ export interface Course {
   textColor?: string;
   subject?: string;
   room?: string;
+  isDefault?: boolean;
+  avatar?: string;
 }
 
 export interface User {

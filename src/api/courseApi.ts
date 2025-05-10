@@ -301,19 +301,41 @@ export const updateCourse = async (id: string, courseData: Partial<UpdateCourseR
   }
 };
 
-export const deleteCourse = async (id: string): Promise<void> => {
-  if (!id || id === 'undefined') {
-    console.error('Invalid course ID provided for deletion:', id);
-    return Promise.reject(new Error(`Invalid course ID for deletion: ${id}`));
+export const deleteCourse = async (id: any): Promise<void> => {
+  // Handle cases where an entire course object is passed instead of just the ID
+  let courseId: string;
+  
+  // Check if we received an object instead of a string
+  if (typeof id === 'object' && id !== null) {
+    // Attempt to extract the course ID from the object
+    courseId = id.id || id.courseId?.toString() || id.courseGuid;
+    console.warn('Object was passed to deleteCourse instead of string ID. Extracted ID:', courseId);
+  } else {
+    courseId = id;
+  }
+  
+  // Enhanced validation for course ID
+  if (!courseId) {
+    console.error('No valid course ID could be extracted for deletion:', id);
+    return Promise.reject(new Error('No valid course ID could be extracted for deletion'));
+  }
+  
+  if (courseId === 'undefined' || courseId === 'null') {
+    console.error(`Invalid course ID format provided for deletion: ${courseId}`);
+    return Promise.reject(new Error(`Invalid course ID format: ${courseId}`));
   }
   
   try {
+    console.log(`Attempting to delete course with ID: ${courseId}`);
+    
     // Always use the numeric ID endpoint
     // No longer using GUID endpoints as requested
-    await courseApi.delete(`/${id}`);
+    await courseApi.delete(`/${courseId}`);
+    console.log(`Successfully deleted course with ID: ${courseId}`);
     return Promise.resolve();
   } catch (error) {
-    return handleApiError(error, `Failed to delete course with ID ${id}`);
+    console.error(`Error in deleteCourse API call with ID ${courseId}:`, error);
+    return handleApiError(error, `Failed to delete course with ID ${courseId}`);
   }
 };
 
@@ -455,15 +477,91 @@ export const ensureCourseColors = async (courses: Course[]): Promise<Course[]> =
 // Enroll in a course by enrollment code (for students)
 export const enrollCourseByCode = async (enrollmentCode: string): Promise<void> => {
   try {
-    console.log(`Attempting to enroll with code: ${enrollmentCode}`);
+    console.log(`Enrolling in course with enrollment code: ${enrollmentCode}`);
     
-    // POST to /enroll-by-code endpoint with the enrollment code
-    await courseApi.post('/enroll-by-code', { enrollmentCode });
+    // Call the API to enroll with the code
+    // POST: api/courses/enroll-by-code/{code}
+    await courseApi.post(`/enroll-by-code/${enrollmentCode}`);
     
-    console.log('Successfully enrolled in course with code');
-    return Promise.resolve();
-  } catch (error) {
-    console.error('Error enrolling with code:', error);
-    return handleApiError(error, `Failed to enroll in course with code ${enrollmentCode}`);
+    console.log('Successfully enrolled in course');
+  } catch (error: any) {
+    console.error('Error enrolling in course by code:', error);
+    
+    if (error.response?.status === 404) {
+      throw new Error('Invalid enrollment code. Please check and try again.');
+    }
+    
+    handleApiError(error, 'Failed to enroll in course');
+  }
+};
+
+/**
+ * Get all grades for a course (teacher only)
+ * GET: api/courses/{courseId}/grades
+ */
+export const getCourseGrades = async (courseId: string | number): Promise<any> => {
+  try {
+    console.log(`Fetching all grades for course: ${courseId}`);
+    
+    // Ensure the user role is checked client-side as well
+    const userRole = sessionStorage.getItem('user_role') || localStorage.getItem('user_role');
+    const isTeacher = userRole?.toLowerCase() === 'teacher';
+    
+    if (!isTeacher) {
+      console.warn('Attempted to access teacher-only grades endpoint as non-teacher');
+      throw new Error('Access denied: Teacher role required to view all course grades');
+    }
+    
+    // Call the API to get all grades for the course
+    // GET: api/courses/{courseId}/grades
+    const response = await courseApi.get(`/${courseId}/grades`);
+    
+    console.log('Successfully retrieved course grades:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error(`Error fetching grades for course ${courseId}:`, error);
+    
+    if (error.response?.status === 403) {
+      throw new Error('Access denied: You do not have permission to view all grades for this course.');
+    }
+    
+    return handleApiError(error, `Failed to fetch grades for course ${courseId}`);
+  }
+};
+
+/**
+ * Get grades for a specific student in a course (teacher or the student themselves)
+ * GET: api/courses/{courseId}/students/{studentId}/grades
+ */
+export const getStudentGrades = async (courseId: string | number, studentId: string | number): Promise<any> => {
+  try {
+    console.log(`Fetching grades for student ${studentId} in course ${courseId}`);
+    
+    // Get current user information to verify access permissions
+    const userRole = sessionStorage.getItem('user_role') || localStorage.getItem('user_role');
+    const currentUserId = sessionStorage.getItem('user_id') || localStorage.getItem('user_id');
+    const isTeacher = userRole?.toLowerCase() === 'teacher';
+    const isRequestingOwnGrades = currentUserId === studentId.toString();
+    
+    // Only teachers or the student themselves should access this
+    if (!isTeacher && !isRequestingOwnGrades) {
+      console.warn('Attempted to access grades for another student');
+      throw new Error('Access denied: You can only view your own grades unless you are a teacher');
+    }
+    
+    // Call the API to get grades for the student
+    // GET: api/courses/{courseId}/students/{studentId}/grades
+    const response = await courseApi.get(`/${courseId}/students/${studentId}/grades`);
+    
+    console.log(`Successfully retrieved grades for student ${studentId}:`, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error(`Error fetching grades for student ${studentId} in course ${courseId}:`, error);
+    
+    if (error.response?.status === 403) {
+      throw new Error('Access denied: You do not have permission to view these grades.');
+    }
+    
+    return handleApiError(error, `Failed to fetch grades for student ${studentId} in course ${courseId}`);
   }
 };

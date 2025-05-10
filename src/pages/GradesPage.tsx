@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Calendar, BellDot, Settings, Download } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Calendar, BellDot, Settings, Download, AlertCircle, RefreshCw } from 'lucide-react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useStudentData, Student } from '../contexts/StudentDataContext';
+import * as courseApi from '../api/courseApi';
 
 export default function GradesPage() {
   const { classId } = useParams();
@@ -14,29 +15,129 @@ export default function GradesPage() {
   const isPeople = currentPath.endsWith('/people');
   const isGrades = currentPath.endsWith('/grades');
 
-  // Get student data from context
-  const { students, syncGradeData } = useStudentData();
-  
+  // State for API-fetched students data
+  const [apiStudents, setApiStudents] = useState<Student[]>([]);
+  // State for loading and error handling
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Track if a refresh is in progress
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Track last fetch time to prevent excessive API calls
+  const [lastFetchTime, setLastFetchTime] = useState(0);
+  // Min time between API calls (5 seconds)
+  const MIN_FETCH_INTERVAL = 5000;
   // Add dummy state at the top-level of the component for force re-render
   const [, forceUpdate] = useState(0);
+  
+  // Get student data from context (as fallback)
+  const { students: contextStudents, syncGradeData } = useStudentData();
+  
+  // Combine API students with context students, prioritizing API data
+  const students = apiStudents.length > 0 ? apiStudents : contextStudents;
+  
+  // Get user role to determine which API to use
+  const userRole = sessionStorage.getItem('user_role') || localStorage.getItem('user_role');
+  const userId = sessionStorage.getItem('user_id') || localStorage.getItem('user_id');
+  const isTeacher = userRole?.toLowerCase() === 'teacher';
 
-  // Listen for grade updates
+  // Create fetchGradesData function with useCallback to avoid recreation on each render
+  const fetchGradesData = useCallback(async () => {
+    if (!classId) return;
+    
+    // Prevent excessive API calls
+    const now = Date.now();
+    if (now - lastFetchTime < MIN_FETCH_INTERVAL) {
+      console.log('Skipping API call - too soon since last fetch');
+      return;
+    }
+    
+    setLastFetchTime(now);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      let gradeData;
+      
+      if (isTeacher) {
+        // Teacher can see all grades
+        console.log('Fetching all course grades as teacher');
+        gradeData = await courseApi.getCourseGrades(classId);
+      } else if (userId) {
+        // Student can only see their own grades
+        console.log('Fetching student grades');
+        gradeData = await courseApi.getStudentGrades(classId, userId);
+      }
+      
+      console.log('Successfully fetched grades data:', gradeData);
+      
+      // Handle different API response formats
+      if (gradeData) {
+        // The structure might be in different formats
+        const studentArray = Array.isArray(gradeData.studentGrades) ? gradeData.studentGrades : 
+                            Array.isArray(gradeData.students) ? gradeData.students :
+                            Array.isArray(gradeData) ? gradeData : [];
+                            
+        if (studentArray.length > 0) {
+          // Map API data to match the Student interface
+          const mappedStudents = studentArray.map((student: any) => ({
+            id: student.studentId || student.id || `student-${Date.now()}`,
+            name: student.studentName || student.name || 'Unknown Student',
+            email: student.email,
+            avatar: student.avatar,
+            assignmentAvg: student.assignmentAvg || student.assignmentAverage || (student.grade ? `${student.grade}%` : '0%'),
+            participation: student.participation || (student.submissions ? `${(student.submissions.length / (student.totalAssignments || 1) * 100).toFixed(1)}%` : '0%'),
+            finalGrade: student.finalGrade || student.overallGrade || (student.grade ? `${student.grade}%` : '0%')
+          }));
+          
+          console.log('Mapped student data:', mappedStudents);
+          setApiStudents(mappedStudents);
+          return; // Exit early if we successfully processed the data
+        }
+      }
+      
+      console.log('Grade data format unexpected, falling back to context data');
+      // Fall back to context data
+      syncGradeData();
+    } catch (err) {
+      console.error('Error fetching grades:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load grades data');
+      // Fall back to context data
+      syncGradeData();
+    } finally {
+      setLoading(false);
+    }
+  }, [classId, isTeacher, userId, lastFetchTime, MIN_FETCH_INTERVAL, syncGradeData]);
+
+  // Function to manually refresh data
+  const handleManualRefresh = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    
+    setIsRefreshing(true);
+    await fetchGradesData();
+    setIsRefreshing(false);
+  };
+  
+  // Fetch grades data on component mount and when dependencies change
   useEffect(() => {
-    // Only trigger a lightweight re-render on grade events, never call syncGradeData here!
+    // Initial data fetch
+    fetchGradesData();
+    
+    // Listen for grade updates but prevent cascading refreshes
     const handleGradeUpdate = () => {
-      forceUpdate(n => n + 1); // Just re-render, don't sync again!
+      forceUpdate(n => n + 1); // Re-render on grade updates
+      // Don't call fetchGradesData() here to prevent infinite loops
     };
+    
     window.addEventListener('gradesUpdated', handleGradeUpdate);
     window.addEventListener('submissionUpdated', handleGradeUpdate);
     window.addEventListener('newAssignmentCreated', handleGradeUpdate);
-    // Sync grades ONCE when component mounts
-    syncGradeData();
+    
     return () => {
       window.removeEventListener('gradesUpdated', handleGradeUpdate);
       window.removeEventListener('submissionUpdated', handleGradeUpdate);
       window.removeEventListener('newAssignmentCreated', handleGradeUpdate);
     };
-  }, []); // Only run once on mount
+  }, [fetchGradesData]);
 
   // Calculate class metrics from student data
   const classMetrics = {
@@ -46,12 +147,16 @@ export default function GradesPage() {
   };
   
   // Helper function to calculate class average
-  function calculateClassAverage(students: Student[]) {
-    if (students.length === 0) return '0%';
+  function calculateClassAverage(studentList: Student[]) {
+    if (studentList.length === 0) return '0%';
     
-    const validGrades = students
+    const validGrades = studentList
       .filter((student: Student) => student.finalGrade && student.finalGrade !== '0%')
-      .map((student: Student) => parseFloat(student.finalGrade?.replace('%', '') || '0'));
+      .map((student: Student) => {
+        // Safely convert finalGrade to a number, handling both string and number types
+        const gradeStr = typeof student.finalGrade === 'string' ? student.finalGrade : String(student.finalGrade || 0);
+        return parseFloat(gradeStr.replace('%', ''));
+      });
       
     if (validGrades.length === 0) return '0%';
     
@@ -60,12 +165,16 @@ export default function GradesPage() {
   }
   
   // Helper function to find highest grade
-  function findHighestGrade(students: Student[]) {
-    if (students.length === 0) return '0%';
+  function findHighestGrade(studentList: Student[]) {
+    if (studentList.length === 0) return '0%';
     
-    const validGrades = students
+    const validGrades = studentList
       .filter((student: Student) => student.finalGrade && student.finalGrade !== '0%')
-      .map((student: Student) => parseFloat(student.finalGrade?.replace('%', '') || '0'));
+      .map((student: Student) => {
+        // Safely convert finalGrade to a number, handling both string and number types
+        const gradeStr = typeof student.finalGrade === 'string' ? student.finalGrade : String(student.finalGrade || 0);
+        return parseFloat(gradeStr.replace('%', ''));
+      });
       
     if (validGrades.length === 0) return '0%';
     
@@ -73,12 +182,16 @@ export default function GradesPage() {
   }
   
   // Helper function to find lowest grade
-  function findLowestGrade(students: Student[]) {
-    if (students.length === 0) return '0%';
+  function findLowestGrade(studentList: Student[]) {
+    if (studentList.length === 0) return '0%';
     
-    const validGrades = students
+    const validGrades = studentList
       .filter((student: Student) => student.finalGrade && student.finalGrade !== '0%')
-      .map((student: Student) => parseFloat(student.finalGrade?.replace('%', '') || '0'));
+      .map((student: Student) => {
+        // Safely convert finalGrade to a number, handling both string and number types
+        const gradeStr = typeof student.finalGrade === 'string' ? student.finalGrade : String(student.finalGrade || 0);
+        return parseFloat(gradeStr.replace('%', ''));
+      });
       
     if (validGrades.length === 0) return '0%';
     
@@ -89,7 +202,7 @@ export default function GradesPage() {
   const gradeDistribution = calculateGradeDistribution(students);
   
   // Helper function to calculate grade distribution
-  function calculateGradeDistribution(students: Student[]) {
+  function calculateGradeDistribution(studentList: Student[]) {
     const distribution = [
       { range: '90-100', count: 0, label: 'A' },
       { range: '80-89', count: 0, label: 'B' },
@@ -98,10 +211,18 @@ export default function GradesPage() {
       { range: '0-59', count: 0, label: 'F' }
     ];
     
-    students.forEach((student: Student) => {
+    studentList.forEach((student: Student) => {
       if (!student.finalGrade || student.finalGrade === '0%') return;
       
-      const grade = parseFloat(student.finalGrade.replace('%', ''));
+      // Safely handle finalGrade as either string or number
+      let grade: number;
+      if (typeof student.finalGrade === 'string') {
+        grade = parseFloat(student.finalGrade.replace('%', ''));
+      } else if (typeof student.finalGrade === 'number') {
+        grade = student.finalGrade;
+      } else {
+        return; // Skip if finalGrade is neither string nor number
+      }
       
       if (grade >= 90) distribution[0].count++;
       else if (grade >= 80) distribution[1].count++;
@@ -115,7 +236,7 @@ export default function GradesPage() {
 
   const [search, setSearch] = React.useState('');
   const filteredStudents = students.filter(
-    (student) =>
+    (student: Student) =>
       student.name.toLowerCase().includes(search.toLowerCase()) ||
       (student.id && student.id.toLowerCase().includes(search.toLowerCase()))
   );
@@ -123,20 +244,20 @@ export default function GradesPage() {
   // Export grades as CSV
   const handleExportGrades = () => {
     const header = ['Student Name', 'Assignment Avg', 'Participation', 'Final Grade'];
-    const rows = students.map(s => [
+    const rows = students.map((s: Student) => [
       s.name,
       s.assignmentAvg,
       s.participation,
       s.finalGrade
     ]);
     const csvContent = [header, ...rows]
-      .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+      .map(row => row.map((field: any) => `"${String(field).replace(/"/g, '""')}"`).join(','))
       .join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${location.state?.className || 'class'}_grades.csv`;
+    a.download = `${location.state ? (location.state as any).className || 'class' : 'class'}_grades.csv`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -189,6 +310,14 @@ export default function GradesPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-1 sm:gap-2">
+            <button 
+              onClick={handleManualRefresh} 
+              disabled={isRefreshing}
+              className="p-1 sm:p-2 hover:bg-[#f8f9fa] rounded-full relative"
+              title="Refresh grades data"
+            >
+              <RefreshCw size={18} className={`text-[#444746] ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
             <button className="p-1 sm:p-2 hover:bg-[#f8f9fa] rounded-full">
               <Calendar size={18} className="text-[#444746]" />
             </button>
@@ -251,65 +380,95 @@ export default function GradesPage() {
 
             {/* Grades Table */}
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="hidden sm:table-header-group">
-                  <tr className="border-b">
-                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Student</th>
-                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Assignment Avg</th>
-                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Participation</th>
-                    <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Final Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.length > 0 ? (
-                    filteredStudents.map((student, index) => {
-                      // Determine grade color based on final grade percentage
-                      const gradeValue = parseFloat(student.finalGrade?.replace('%', '') || '0');
-                      let gradeColor = '';
-                      
-                      if (gradeValue >= 90) gradeColor = 'text-green-600';
-                      else if (gradeValue >= 80) gradeColor = 'text-blue-600';
-                      else if (gradeValue >= 70) gradeColor = 'text-yellow-600';
-                      else if (gradeValue >= 60) gradeColor = 'text-orange-600';
-                      else if (gradeValue > 0) gradeColor = 'text-red-600';
-                      else gradeColor = 'text-gray-400';
-                      
-                      return (
-                        <tr key={student.id || index} className="border-b hover:bg-gray-50 sm:table-row flex flex-col">
-                          <td className="py-3 sm:py-4 px-3 sm:px-6 flex items-center gap-2">
-                            {student.avatar ? (
-                              <img src={student.avatar} alt={student.name} className="w-8 h-8 rounded-full" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
-                                {student.name.charAt(0)}
-                              </div>
-                            )}
-                            <span>{student.name}</span>
-                          </td>
-                          <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
-                            <span className="sm:hidden font-medium mr-2">Assignment Avg:</span>
-                            <span>{student.assignmentAvg || '0%'}</span>
-                          </td>
-                          <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
-                            <span className="sm:hidden font-medium mr-2">Participation:</span>
-                            <span>{student.participation || '0%'}</span>
-                          </td>
-                          <td className={`py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell ${gradeColor} font-medium`}>
-                            <span className="sm:hidden font-medium mr-2 text-gray-600">Final Grade:</span>
-                            <span>{student.finalGrade || '0%'}</span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-gray-500">
-                        No students found matching your search criteria.
-                      </td>
+              {loading ? (
+                <div className="py-10 flex justify-center items-center">
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="text-gray-500">Loading grade data...</p>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="py-10 flex justify-center items-center">
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4 max-w-md">
+                    <div className="flex items-start">
+                      <AlertCircle className="text-red-500 mt-0.5 mr-2" size={18} />
+                      <div>
+                        <h3 className="text-sm font-medium text-red-800">Error loading grades</h3>
+                        <p className="mt-1 text-sm text-red-700">{error}</p>
+                        <p className="mt-2 text-sm text-red-700">Using backup grade data instead.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="hidden sm:table-header-group">
+                    <tr className="border-b">
+                      <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Student</th>
+                      <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Assignment Avg</th>
+                      <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Participation</th>
+                      <th className="text-left py-3 sm:py-4 px-3 sm:px-6 font-medium text-gray-600">Final Grade</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map((student, index) => {
+                        // Determine grade color based on final grade percentage
+                        // Safely convert finalGrade to a number, handling both string and number types
+                        let gradeValue: number;
+                        if (typeof student.finalGrade === 'string') {
+                          gradeValue = parseFloat(student.finalGrade.replace('%', ''));
+                        } else if (typeof student.finalGrade === 'number') {
+                          gradeValue = student.finalGrade;
+                        } else {
+                          gradeValue = 0;
+                        }
+                        let gradeColor = '';
+                        
+                        if (gradeValue >= 90) gradeColor = 'text-green-600';
+                        else if (gradeValue >= 80) gradeColor = 'text-blue-600';
+                        else if (gradeValue >= 70) gradeColor = 'text-yellow-600';
+                        else if (gradeValue >= 60) gradeColor = 'text-orange-600';
+                        else if (gradeValue > 0) gradeColor = 'text-red-600';
+                        else gradeColor = 'text-gray-400';
+                        
+                        return (
+                          <tr key={student.id || index} className="border-b hover:bg-gray-50 sm:table-row flex flex-col">
+                            <td className="py-3 sm:py-4 px-3 sm:px-6 flex items-center gap-2">
+                              {student.avatar ? (
+                                <img src={student.avatar} alt={student.name} className="w-8 h-8 rounded-full" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
+                                  {student.name.charAt(0)}
+                                </div>
+                              )}
+                              <span>{student.name}</span>
+                            </td>
+                            <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
+                              <span className="sm:hidden font-medium mr-2">Assignment Avg:</span>
+                              <span>{student.assignmentAvg || '0%'}</span>
+                            </td>
+                            <td className="py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell">
+                              <span className="sm:hidden font-medium mr-2">Participation:</span>
+                              <span>{student.participation || '0%'}</span>
+                            </td>
+                            <td className={`py-2 sm:py-4 px-3 sm:px-6 flex sm:table-cell ${gradeColor} font-medium`}>
+                              <span className="sm:hidden font-medium mr-2 text-gray-600">Final Grade:</span>
+                              <span>{student.finalGrade || '0%'}</span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-gray-500">
+                          No students found matching your search criteria.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

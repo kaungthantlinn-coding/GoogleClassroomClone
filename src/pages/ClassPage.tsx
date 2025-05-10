@@ -251,6 +251,31 @@ export default function ClassPage() {
   const handleCloseModal = () => {
     setShowAllAssignments(false);
   };
+  
+  // Format due date in a user-friendly way
+  const formatDueDate = (dateString: string) => {
+    if (!dateString) return '';
+    
+    try {
+      // Parse the date
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return dateString; // Return original if invalid
+      }
+      
+      // Format as Month Day, Year (ex: May 10, 2025)
+      const options: Intl.DateTimeFormatOptions = { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      };
+      
+      return date.toLocaleDateString('en-US', options);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString; // Return original on error
+    }
+  };
 
   // Load announcements when the component mounts or when classId changes
   useEffect(() => {
@@ -744,7 +769,7 @@ export default function ClassPage() {
                                 )}
                               </div>
                               <p className="text-xs text-[#5f6368] mt-0.5">
-                                {assignment.status === 'missing' ? 'Was due' : 'Due'} {assignment.dueDate}, {assignment.dueTime}
+                                {assignment.status === 'missing' ? 'Was due' : 'Due'} {formatDueDate(assignment.dueDate)}, {assignment.dueTime}
                               </p>
                             </div>
                           </div>

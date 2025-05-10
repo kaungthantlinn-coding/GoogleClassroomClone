@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Course } from '../types/course';
 import { Link } from 'react-router-dom';
 import { Users, Folder, Trash2, Edit, Plus, MoreVertical, LogOut } from 'lucide-react';
-import { deleteCourse, getCourses, updateCourse, enrollCourse, enrollCourseByCode, unenrollCourse } from '../api/courseApi';
+import { deleteCourse, getCourses, updateCourse, enrollCourseByCode, unenrollCourse } from '../api/courseApi';
 import axios from 'axios';
 import ArchiveConfirmationModal from '../components/ArchiveConfirmationModal';
 
@@ -180,19 +180,38 @@ export default function HomePage() {
   };
 
   const confirmArchive = () => {
-    if (!selectedCourse) return;
+    if (!selectedCourse) {
+      console.warn('No course selected for deletion');
+      setShowArchiveModal(false);
+      return;
+    }
+    
+    // Extract the course ID using multiple possible properties
+    const courseId = selectedCourse.id || 
+                    (selectedCourse.courseId ? String(selectedCourse.courseId) : undefined) || 
+                    selectedCourse.courseGuid;
+    
+    // Validate the extracted course ID
+    if (!courseId || courseId === 'undefined' || courseId === 'null') {
+      console.error('Could not find valid ID for course:', selectedCourse);
+      alert('Cannot delete course: No valid ID found for this course');
+      setShowArchiveModal(false);
+      setSelectedCourse(null);
+      return;
+    }
 
     // Delete course via API
-    deleteCourse(selectedCourse.id)
+    console.log('Attempting to delete course with extracted ID:', courseId);
+    deleteCourse(courseId)
       .then(() => {
-        console.log(`Deleted course: ${selectedCourse.id}`);
+        console.log(`Successfully deleted course: ${courseId}`);
 
         // Refresh the courses list
         queryClient.invalidateQueries({ queryKey: ['courses'] });
 
         // Dispatch event to update sidebar
         const archiveEvent = new CustomEvent('class-removed', {
-          detail: { action: 'removeClass', classId: selectedCourse.id }
+          detail: { action: 'removeClass', classId: courseId }
         });
         window.dispatchEvent(archiveEvent);
 
@@ -201,7 +220,8 @@ export default function HomePage() {
         setSelectedCourse(null);
       })
       .catch(error => {
-        console.error(`Failed to delete course ${selectedCourse.id}:`, error);
+        console.error(`Failed to delete course ${courseId}:`, error);
+        alert(`Could not delete course: ${error.message || 'Unknown error'}`);
       });
   };
 
@@ -897,7 +917,7 @@ export default function HomePage() {
                           e.preventDefault();
                           e.stopPropagation();
                           // Normalize the course ID
-                          const courseId = course.courseId?.toString() || course.id || course.courseGuid;
+                          const courseId = course.courseId?.toString() || course.id || course.courseGuid || '';
                           setOpenMenuCourseId(openMenuCourseId === courseId ? null : courseId);
                         }}
                         className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
@@ -955,8 +975,8 @@ export default function HomePage() {
                                 console.log('Setting up unenroll for course:', courseId, course.name);
                                 
                                 // Set the state for the unenroll modal
-                                setUnenrollCourseId(courseId);
-                                setUnenrollCourseName(course.name);
+                                setUnenrollCourseId(courseId || '');
+                                setUnenrollCourseName(course.name || 'Unknown Course');
                                 setShowUnenrollModal(true);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
