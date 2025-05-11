@@ -561,6 +561,11 @@ export default function ClassPage() {
     }
   }, [courseData]);
 
+  // Get user role from localStorage or sessionStorage
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+  const isTeacher = userRole?.toLowerCase() === 'teacher' || !isStudent; // Default to teacher if role not set
+
   const isActive = (path: string) => {
     if (path === 'submissions' && isSubmissions) {
       return 'text-[#1967d2] border-b-2 border-[#1967d2]';
@@ -672,13 +677,16 @@ export default function ClassPage() {
               >
                 People
               </Link>
-              <Link
-                to={`/class/${classId}/grades`}
-                state={classData}
-                className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('grades')}`}
-              >
-                Grades
-              </Link>
+              {/* Only show Grades tab for teachers */}
+              {!isStudent && (
+                <Link
+                  to={`/class/${classId}/grades`}
+                  state={classData}
+                  className={`px-3 sm:px-4 py-[12px] sm:py-[14px] text-[13px] sm:text-[14px] whitespace-nowrap ${isActive('grades')}`}
+                >
+                  Grades
+                </Link>
+              )}
             </nav>
             <div className="hidden sm:flex items-center">
               <button className="p-2 hover:bg-[#f8f9fa] rounded-full">

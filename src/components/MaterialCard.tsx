@@ -27,6 +27,11 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
+  // Get user role from localStorage or sessionStorage
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
+  const isStudent = userRole?.toLowerCase() === 'student';
+  const isTeacher = userRole?.toLowerCase() === 'teacher' || !isStudent; // Default to teacher if role not set
+  
   // Check if we have a valid ID
   const hasValidId = !!id && (typeof id === 'string' || typeof id === 'number');
   
@@ -138,36 +143,39 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
             </div>
           </div>
           
-          <div className="relative">
-            {showMenu && (
-              <div ref={menuRef} className="absolute right-0 bottom-full mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl z-20 animate-fade-in">
-                {/* Caret */}
-                <div className="absolute right-4 -bottom-2 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45 z-30"></div>
-                <button 
-                  onClick={handleEdit}
-                  className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left rounded-t-xl"
-                >
-                  <Edit size={16} className="text-[#5f6368]" />
-                  Edit
-                </button>
-                {hasValidId && onDelete && (
+          {/* Only show three-dot menu for teachers */}
+          {!isStudent && (
+            <div className="relative">
+              {showMenu && (
+                <div ref={menuRef} className="absolute right-0 bottom-full mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl z-20 animate-fade-in">
+                  {/* Caret */}
+                  <div className="absolute right-4 -bottom-2 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45 z-30"></div>
                   <button 
-                    onClick={handleDeleteClick}
-                    className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left text-red-600 rounded-b-xl"
+                    onClick={handleEdit}
+                    className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left rounded-t-xl"
                   >
-                    <Trash size={16} />
-                    Delete
+                    <Edit size={16} className="text-[#5f6368]" />
+                    Edit
                   </button>
-                )}
-              </div>
-            )}
-            <button 
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-gray-100 rounded-full"
-            >
-              <MoreVertical size={20} className="text-[#5f6368]" />
-            </button>
-          </div>
+                  {hasValidId && onDelete && (
+                    <button 
+                      onClick={handleDeleteClick}
+                      className="w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 text-sm text-left text-red-600 rounded-b-xl"
+                    >
+                      <Trash size={16} />
+                      Delete
+                    </button>
+                  )}
+                </div>
+              )}
+              <button 
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <MoreVertical size={20} className="text-[#5f6368]" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
       

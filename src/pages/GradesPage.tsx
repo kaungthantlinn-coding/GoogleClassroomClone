@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Calendar, BellDot, Settings, Download, AlertCircle, RefreshCw } from 'lucide-react';
-import { Link, useParams, useLocation } from 'react-router-dom';
+import { Link, useParams, useLocation, Navigate } from 'react-router-dom';
 import { useStudentData, Student } from '../contexts/StudentDataContext';
 import * as courseApi from '../api/courseApi';
 
@@ -39,6 +39,13 @@ export default function GradesPage() {
   const userRole = sessionStorage.getItem('user_role') || localStorage.getItem('user_role');
   const userId = sessionStorage.getItem('user_id') || localStorage.getItem('user_id');
   const isTeacher = userRole?.toLowerCase() === 'teacher';
+  const isStudent = userRole?.toLowerCase() === 'student';
+  
+  // Redirect students who try to access this page directly
+  if (isStudent) {
+    console.log('Student attempted to access grades page - redirecting to class stream');
+    return <Navigate to={`/class/${classId}`} replace />;
+  }
 
   // Create fetchGradesData function with useCallback to avoid recreation on each render
   const fetchGradesData = useCallback(async () => {

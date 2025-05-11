@@ -147,10 +147,12 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
             <div className="text-[#1a73e8] font-medium">
               {points} points
             </div>
-            <div className="relative">
-              <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-gray-100 rounded-full">
-                <MoreVertical size={18} className="text-[#5f6368]" />
-              </button>
+            {/* Only show three-dot menu for teachers */}
+            {!isStudent && (
+              <div className="relative">
+                <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-gray-100 rounded-full">
+                  <MoreVertical size={18} className="text-[#5f6368]" />
+                </button>
               
               {showMenu && (
                 <div 
@@ -176,6 +178,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
         
