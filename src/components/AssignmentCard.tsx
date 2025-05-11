@@ -6,7 +6,7 @@ interface AssignmentCardProps {
   id?: string; // Make id optional to handle cases where it might be undefined
   title: string;
   description?: string;
-  // instructions field removed as it's not used/displayed anymore
+  instructions?: string; // Added back since it's being passed from ClassworkPage
   points: string;
   dueDate: string;
   onEdit?: (id: string) => void;
@@ -17,7 +17,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({
   id,
   title,
   description,
-  // instructions removed as it's not used
+  instructions: _, // Not displayed but received from parent
   points,
   dueDate,
   onEdit,

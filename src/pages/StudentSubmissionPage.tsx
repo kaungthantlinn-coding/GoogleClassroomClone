@@ -8,6 +8,7 @@ import { Switch } from '../components/ui/switch';
 import { useStudentData, Student } from '../contexts/StudentDataContext';
 import * as storageApi from '../api/storageApi';
 import * as assignmentApi from '../api/assignmentApi';
+import { downloadSubmissionFile } from '../api/fileUploadApi';
 
 interface StudentSubmission {
   id: string;
@@ -362,15 +363,34 @@ const StudentSubmissionPage: React.FC = () => {
   }, [submission, points, feedback, sendEmail, handleBackToSubmissions]);
   
   // Handle file download
-  const handleFileDownload = useCallback((fileName: string) => {
-    // In a real implementation, this would download the actual file
-    console.log(`Downloading file: ${fileName}`);
-    // Mock download for demo
-    const a = document.createElement('a');
-    a.href = '#';
-    a.download = fileName;
-    a.click();
-  }, []);
+  const handleFileDownload = useCallback(async (file: {name: string, id?: string}) => {
+    try {
+      const fileId = file.id || `${submission?.id}-${file.name}`;
+      
+      // Check if we have a proper file ID
+      if (!fileId) {
+        console.error('Cannot download file: Missing file ID');
+        return;
+      }
+      
+      console.log(`Downloading file: ${file.name} (ID: ${fileId})`);
+      
+      try {
+        // Use our file download API
+        await downloadSubmissionFile(fileId, file.name);
+      } catch (downloadError) {
+        console.error('Error downloading file from API:', downloadError);
+        
+        // Fallback for demo purposes - create a mock download
+        const a = document.createElement('a');
+        a.href = '#';
+        a.download = file.name;
+        a.click();
+      }
+    } catch (error) {
+      console.error('Error in file download:', error);
+    }
+  }, [submission?.id]);
   
   // Render access denied message
   if (accessDenied) {
@@ -512,7 +532,7 @@ const StudentSubmissionPage: React.FC = () => {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => handleFileDownload(file.name)}
+                        onClick={() => handleFileDownload(file)}
                         className="flex items-center gap-1 text-xs"
                       >
                         <Download className="h-3 w-3" />

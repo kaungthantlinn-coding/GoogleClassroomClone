@@ -89,7 +89,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   const isStudent = userRole?.toLowerCase() === 'student';
 
   // Use React Query to fetch courses
-  const { data: courses, isLoading: isLoadingCourses } = useQuery({
+  const { data: courses } = useQuery({
     queryKey: ['courses'],
     queryFn: getCourses,
     refetchOnWindowFocus: true,
@@ -245,7 +245,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   ];
 
   // Function to get the cover image for a class with responsive sizing
-  const getCoverImageForClass = (classId: string, className: string): string => {
+  const getCoverImageForClass = (_: string, className: string): string => {
     // Generate a class-specific image based on the class name
     let query = 'education,classroom';
     if (className.toLowerCase().includes('ui') || className.toLowerCase().includes('ux')) {
@@ -290,7 +290,9 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     return size;
   };
 
+  /* 
   // Helper function to update existing Unsplash URLs to be responsive
+  // Currently not used but kept for reference
   const getResponsiveImageUrl = (url: string): string => {
     // If it's not an Unsplash URL, return as is
     if (!url.includes('unsplash.com')) return url;
@@ -326,12 +328,14 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     // Return original URL if any issues occur
     return url;
   };
+  */
 
   const handleCreateClass = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClass.name) return;
 
-    const coverImage = getCoverImageForClass('temp-id', newClass.name);
+    // Get cover image but not using it directly at the moment
+    getCoverImageForClass('temp-id', newClass.name);
 
     // Create the course data
     const courseData = {
@@ -353,8 +357,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         console.log('Returned color:', createdCourse.color);
 
         // Create a new class object for state update
-        const newClassObj = {
-          id: createdCourse.id || createdCourse.courseId?.toString() || createdCourse.courseGuid,
+        const newClassObj: Class = {
+          id: createdCourse.id || createdCourse.courseId?.toString() || createdCourse.courseGuid || `temp-${Date.now()}`,
           name: createdCourse.name,
           section: createdCourse.section || '',
           color: createdCourse.color || courseData.color || '#4285f4',
@@ -396,10 +400,13 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     setIsSidebarVisible(!isSidebarVisible);
   };
 
+  /*
   // Function to handle toggle sidebar event from Navbar
+  // Currently not used but kept for reference
   const handleToggleSidebar = () => {
     setIsSidebarVisible(prevState => !prevState);
   };
+  */
 
   // Function to open create class modal
   const openCreateClassModal = () => {
@@ -530,7 +537,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     ))}
 
                     {/* Teaching Classes */}
-                    {!isCollapsed && teachingClasses.map((classItem, index) => {
+                    {!isCollapsed && teachingClasses.map((classItem) => {
                       // Generate a unique key for each teaching class item
                       const uniqueKey = generateUniqueKey('teaching-class', classItem);
                       return (
@@ -595,112 +602,110 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           </div>
 
           <div className="mt-2">
-            {/* Only show Enrolled section if user is a student or has enrolled classes */}
-            {(isStudent || enrolledClasses.length > 0) && (
-              <>
-                <button
-                  onClick={() => !isCollapsed && setIsEnrolledOpen(!isEnrolledOpen)}
-                  className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
-                >
-                  <BookOpen size={24} strokeWidth={1.5} />
-                  {!isCollapsed && (
-                    <>
-                      <span className="text-sm flex-1 text-left">Enrolled</span>
-                      {isEnrolledOpen ? (
-                        <ChevronUp size={20} strokeWidth={1.5} key="enrolled-chevron-up" />
-                      ) : (
-                        <ChevronDown size={20} strokeWidth={1.5} key="enrolled-chevron-down" />
-                      )}
-                    </>
-                  )}
-                </button>
-                {(isCollapsed || isEnrolledOpen) && (
-                  <div key="enrolled-items-container">
-                    {enrolledItems.map((item) => (
-                      <NavLink
-                        key={`enrolled-item-${item.to}`}
-                        to={item.to}
-                        className={({ isActive }) =>
-                          `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
-                            isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
-                          }`
-                        }
-                      >
-                        <item.icon size={24} strokeWidth={1.5} />
-                        {!isCollapsed && <span className="text-sm">{item.label}</span>}
-                      </NavLink>
-                    ))}
-
-                    {/* Enrolled Classes */}
-                    {!isCollapsed && enrolledClasses.map((classItem) => {
-                      // Generate a unique key for each enrolled class item
-                      const uniqueKey = generateUniqueKey('enrolled-class', classItem);
-                      return (
-                        <div key={uniqueKey} className="group relative flex items-center">
-                          <Link
-                            to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
-                            state={{
-                              className: classItem.name,
-                              section: classItem.section,
-                              color: classItem.color,
-                              coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
-                            }}
-                            className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
-                          >
-                            <div
-                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                              style={{ backgroundColor: getClassColor(classItem) }}
-                            >
-                              {(classItem.name || '?').charAt(0).toUpperCase()}
-                            </div>
-                            <div className="overflow-hidden">
-                              <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
-                              <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
-                            </div>
-                          </Link>
-                          <button
-                            onClick={() => {
-                              // Get the correct course ID
-                              const courseIdToUnenroll = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
-                              if (!courseIdToUnenroll) {
-                                console.error('Cannot unenroll from course - no valid ID found');
-                                return;
-                              }
-                              
-                              // Confirm before unenrolling
-                              if (window.confirm(`Are you sure you want to unenroll from "${classItem.name}"?`)) {
-                                console.log(`Attempting to unenroll from course with ID: ${courseIdToUnenroll}`);
-                                
-                                unenrollCourse(courseIdToUnenroll)
-                                  .then(() => {
-                                    console.log(`Successfully unenrolled from course: ${courseIdToUnenroll}`);
-                                    // Update local state by removing the course
-                                    setEnrolledClasses(prevClasses => prevClasses.filter(cls => 
-                                      cls.id !== courseIdToUnenroll && 
-                                      cls.courseId?.toString() !== courseIdToUnenroll && 
-                                      cls.courseGuid !== courseIdToUnenroll
-                                    ));
-                                    // Invalidate course queries to refresh data
-                                    queryClient.invalidateQueries({ queryKey: ['courses'] });
-                                  })
-                                  .catch(error => {
-                                    console.error(`Failed to unenroll from course ${courseIdToUnenroll}:`, error);
-                                    alert(`Failed to unenroll from class. Error: ${error.message || 'Unknown error'}`);
-                                  });
-                              }
-                            }}
-                            className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
-                            title="Unenroll from class"
-                          >
-                            <LogOut size={16} className="text-gray-500" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* Always show Enrolled section */}
+            <>
+              <button
+                onClick={() => !isCollapsed && setIsEnrolledOpen(!isEnrolledOpen)}
+                className={`w-full flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 px-6'} py-3 rounded-r-full hover:bg-[#f8f9fa] text-[#3c4043]`}
+              >
+                <BookOpen size={24} strokeWidth={1.5} />
+                {!isCollapsed && (
+                  <>
+                    <span className="text-sm flex-1 text-left">Enrolled</span>
+                    {isEnrolledOpen ? (
+                      <ChevronUp size={20} strokeWidth={1.5} key="enrolled-chevron-up" />
+                    ) : (
+                      <ChevronDown size={20} strokeWidth={1.5} key="enrolled-chevron-down" />
+                    )}
+                  </>
                 )}
-              </>
-            )}
+              </button>
+              {(isCollapsed || isEnrolledOpen) && (
+                <div key="enrolled-items-container">
+                  {enrolledItems.map((item) => (
+                    <NavLink
+                      key={`enrolled-item-${item.to}`}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `flex items-center ${isCollapsed ? 'justify-center w-full mx-auto' : 'gap-4 pl-14 pr-6'} py-3 rounded-r-full ${
+                          isActive ? 'bg-[#e8f0fe] text-[#1967d2] font-medium' : 'hover:bg-[#f8f9fa] text-[#3c4043]'
+                        }`
+                      }
+                    >
+                      <item.icon size={24} strokeWidth={1.5} />
+                      {!isCollapsed && <span className="text-sm">{item.label}</span>}
+                    </NavLink>
+                  ))}
+
+                  {/* Enrolled Classes */}
+                  {!isCollapsed && enrolledClasses.map((classItem) => {
+                    // Generate a unique key for each enrolled class item
+                    const uniqueKey = generateUniqueKey('enrolled-class', classItem);
+                    return (
+                      <div key={uniqueKey} className="group relative flex items-center">
+                        <Link
+                          to={`/class/${classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey}`}
+                          state={{
+                            className: classItem.name,
+                            section: classItem.section,
+                            color: classItem.color,
+                            coverImage: getCoverImageForClass(classItem.id || classItem.courseId?.toString() || classItem.courseGuid || uniqueKey, classItem.name)
+                          }}
+                          className="flex-1 flex items-center gap-2 pl-14 pr-6 py-2 hover:bg-[#f8f9fa] text-[#3c4043] rounded-r-full"
+                        >
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                            style={{ backgroundColor: getClassColor(classItem) }}
+                          >
+                            {(classItem.name || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="overflow-hidden">
+                            <span className="text-sm block truncate">{classItem.name || 'Unnamed Class'}</span>
+                            <span className="text-xs text-gray-500 block truncate">{classItem.section || ''}</span>
+                          </div>
+                        </Link>
+                        <button
+                          onClick={() => {
+                            // Get the correct course ID
+                            const courseIdToUnenroll = classItem.id || classItem.courseId?.toString() || classItem.courseGuid;
+                            if (!courseIdToUnenroll) {
+                              console.error('Cannot unenroll from course - no valid ID found');
+                              return;
+                            }
+                            
+                            // Confirm before unenrolling
+                            if (window.confirm(`Are you sure you want to unenroll from "${classItem.name}"?`)) {
+                              console.log(`Attempting to unenroll from course with ID: ${courseIdToUnenroll}`);
+                              
+                              unenrollCourse(courseIdToUnenroll)
+                                .then(() => {
+                                  console.log(`Successfully unenrolled from course: ${courseIdToUnenroll}`);
+                                  // Update local state by removing the course
+                                  setEnrolledClasses(prevClasses => prevClasses.filter(cls => 
+                                    cls.id !== courseIdToUnenroll && 
+                                    cls.courseId?.toString() !== courseIdToUnenroll && 
+                                    cls.courseGuid !== courseIdToUnenroll
+                                  ));
+                                  // Invalidate course queries to refresh data
+                                  queryClient.invalidateQueries({ queryKey: ['courses'] });
+                                })
+                                .catch(error => {
+                                  console.error(`Failed to unenroll from course ${courseIdToUnenroll}:`, error);
+                                  alert(`Failed to unenroll from class. Error: ${error.message || 'Unknown error'}`);
+                                });
+                            }
+                          }}
+                          className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-opacity"
+                          title="Unenroll from class"
+                        >
+                          <LogOut size={16} className="text-gray-500" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           </div>
 
           <div className="mt-4 pt-4 border-t">

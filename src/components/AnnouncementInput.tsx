@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useQuery } from '@tanstack/react-query';
 import { Course } from '../types/course';
 import { getCourses } from '../api/courseApi';
-import { Announcement, Attachment } from '../types/announcement';
+import { Announcement } from '../types/announcement';
 
 // Custom type for the dropdown courses
 interface DropdownCourse {
@@ -23,20 +23,9 @@ interface DropdownCourse {
   enrollmentCode?: string;
 }
 
-// Simple attachment type that matches the UI requirements
-interface SimpleAttachment {
-  id: string;
-  type: string;
-  url: string;
-  name: string;
-  size?: number;
-  uploadDate?: string;
-}
+// Attachment types are handled in the component state directly
 
-// Type for announcement input data
-type AnnouncementInputData = Omit<Announcement, 'id' | 'createdAt' | 'updatedAt' | 'attachments'> & {
-  attachments: SimpleAttachment[];
-};
+// Type definitions for internal component use
 
 const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: () => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,7 +52,7 @@ const AnnouncementInput = ({ onAnnouncementPosted }: { onAnnouncementPosted?: ()
   const announcementDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch available classes
-  const { data: courses, isLoading: loadingCourses } = useQuery<Course[]>({
+  const { data: courses } = useQuery<Course[]>({
     queryKey: ['courses'],
     queryFn: () => getCourses()
   });

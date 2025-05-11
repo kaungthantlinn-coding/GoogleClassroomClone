@@ -6,6 +6,8 @@ import { Textarea } from '../components/ui/textarea';
 import * as assignmentApi from '../api/assignmentApi';
 import { unsubmitAssignment, submitAssignment } from '../api/assignmentApi';
 import * as storageApi from '../api/storageApi';
+import axios from 'axios';
+import FileUpload from '../components/FileUpload';
 
 interface AssignmentDetails {
   id: string;
@@ -26,10 +28,16 @@ const StudentAssignmentSubmitPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [comment, setComment] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [success, setSuccess] = useState(false);
+  
+  // Check for saved submission state in localStorage
+  const storageKey = `submission_${assignmentId}`;
+  const savedState = localStorage.getItem(storageKey);
+  const initialState = savedState && savedState !== "undefined" ? JSON.parse(savedState) : { success: false, files: [] };
+  
+  const [success, setSuccess] = useState(initialState.success);
   const [error, setError] = useState<string | null>(null);
-  const [submittedFiles, setSubmittedFiles] = useState<Array<{name: string, size?: number}>>([]);
-  const [currentSubmissionId, setCurrentSubmissionId] = useState<string>('');  // Store submission ID in state instead of localStorage
+  const [submittedFiles, setSubmittedFiles] = useState<Array<{name: string, size?: number}>>(initialState.files);
+  const [currentSubmissionId, setCurrentSubmissionId] = useState<string>(initialState.submissionId || '');
   
   // Get user information
   const userId = sessionStorage.getItem('user_id') || 'student-123';
@@ -102,19 +110,24 @@ const StudentAssignmentSubmitPage: React.FC = () => {
     loadAssignmentData();
   }, [assignmentId, classId]);
   
+  // Save submission state to localStorage whenever it changes
+  useEffect(() => {
+    if (assignmentId) {
+      const stateToSave = {
+        success,
+        files: submittedFiles,
+        submissionId: currentSubmissionId
+      };
+      localStorage.setItem(storageKey, JSON.stringify(stateToSave));
+    }
+  }, [success, submittedFiles, currentSubmissionId, assignmentId, storageKey]);
+  
+  // Add a new state for upload progress
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  
   const handleBackClick = () => {
     navigate(-1);
-  };
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
-      setFiles(prev => [...prev, ...newFiles]);
-    }
-  };
-  
-  const handleRemoveFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
   };
   
   const handleSubmitAssignment = async () => {
@@ -124,26 +137,24 @@ const StudentAssignmentSubmitPage: React.FC = () => {
     }
     
     setSubmitting(true);
+    setIsUploading(true);
+    setUploadProgress(0);
     setError(null);
     
     try {
-      // Prepare submission data
+      // Prepare submission data with the actual File objects
       const submissionData = {
         assignmentId,
         studentId: userId,
         studentName: userName,
-        files: files.map(file => ({
-          name: file.name,
-          type: file.type,
-          size: file.size
-        })),
+        // Include the actual File objects here, they will be handled correctly in the API
+        files,
         comment,
         submittedDate: new Date().toLocaleString('en-US'),
         status: 'submitted'
       };
       
-      // Make real API call to submit assignment using the API route:
-      // POST: api/assignments/{assignmentId}/submissions
+      // Make API call to submit assignment
       let submissionResult;
       
       try {
@@ -151,8 +162,28 @@ const StudentAssignmentSubmitPage: React.FC = () => {
         if (!assignmentId) {
           throw new Error('Assignment ID is required');
         }
-        // Use the new API function
+        
+        // Set up a progress listener for the upload
+        const originalAxiosPost = axios.post;
+        axios.post = async (...args) => {
+          const [url, data, config] = args;
+          const uploadConfig = {
+            ...config,
+            onUploadProgress: (progressEvent) => {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+              setUploadProgress(percentCompleted);
+              console.log(`Upload progress: ${percentCompleted}%`);
+            },
+          };
+          return originalAxiosPost(url, data, uploadConfig);
+        };
+        
+        // Use the updated submitAssignment function which handles files properly
         submissionResult = await submitAssignment(assignmentId, submissionData);
+        
+        // Reset axios.post to its original implementation
+        axios.post = originalAxiosPost;
+        
         console.log('Assignment submitted successfully:', submissionResult);
       } catch (apiError) {
         console.error('API error:', apiError);
@@ -163,11 +194,16 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       // Save submission ID in state for later use (unsubmit, edit, etc.)
       setCurrentSubmissionId(submissionResult.id);
       
-      // Save submitted files for display in success view
-      setSubmittedFiles(files.map(file => ({
+      // Get the file information from the API response if available,
+      // otherwise use the local files
+      const fileInfo = submissionResult.files || files.map(file => ({
         name: file.name,
-        size: file.size
-      })));
+        size: file.size,
+        id: submissionResult.id ? `${submissionResult.id}-${file.name}` : undefined
+      }));
+      
+      // Save submitted files for display in success view
+      setSubmittedFiles(fileInfo);
       
       // Show success state immediately
       setSuccess(true);
@@ -177,6 +213,7 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       setError('Failed to submit assignment. Please try again.');
     } finally {
       setSubmitting(false);
+      setIsUploading(false);
     }
   };
   
@@ -311,6 +348,9 @@ const StudentAssignmentSubmitPage: React.FC = () => {
                                 
                                 // Clear the submission ID from state
                                 setCurrentSubmissionId('');
+                                
+                                // Remove from localStorage
+                                localStorage.removeItem(storageKey);
                               } catch (error) {
                                 console.error('Error unsubmitting assignment:', error);
                                 // Continue with local state changes even if API call fails
@@ -425,48 +465,14 @@ const StudentAssignmentSubmitPage: React.FC = () => {
               <div className="p-6">
                 <h2 className="text-lg font-medium mb-4">Your work</h2>
                 
-                {/* File upload area */}
-                <div className="mb-6">
-                  <label htmlFor="file-upload" className="block mb-2 text-sm font-medium text-gray-700">
-                    Add attachment
-                  </label>
-                  <div className="flex items-center justify-center w-full">
-                    <label 
-                      htmlFor="file-upload" 
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
-                    >
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="w-8 h-8 mb-2 text-gray-500" />
-                        <p className="mb-1 text-sm text-gray-500">Click to upload files</p>
-                        <p className="text-xs text-gray-500">PDF, DOCX, JPG, PNG</p>
-                      </div>
-                      <input id="file-upload" type="file" className="hidden" multiple onChange={handleFileChange} />
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Display selected files */}
-                {files.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium mb-2">Attached files:</h3>
-                    <ul className="space-y-2">
-                      {files.map((file, index) => (
-                        <li key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center">
-                            <FileText size={16} className="text-gray-500 mr-2" />
-                            <span className="text-sm text-gray-700">{file.name}</span>
-                          </div>
-                          <button 
-                            onClick={() => handleRemoveFile(index)}
-                            className="text-gray-400 hover:text-red-500"
-                          >
-                            <X size={16} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {/* Replace existing file upload area with the new component */}
+                <FileUpload 
+                  files={files}
+                  onFilesChange={setFiles}
+                  maxFiles={5}
+                  maxSize={20 * 1024 * 1024} // 20MB
+                  className="mb-6"
+                />
                 
                 {/* Comment area */}
                 <div className="mb-6">
@@ -487,6 +493,19 @@ const StudentAssignmentSubmitPage: React.FC = () => {
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start">
                     <AlertCircle size={16} className="text-red-500 mt-0.5 mr-2 flex-shrink-0" />
                     <p className="text-sm text-red-600">{error}</p>
+                  </div>
+                )}
+                
+                {/* Upload progress */}
+                {isUploading && (
+                  <div className="mb-4">
+                    <p className="text-sm mb-2">Uploading files: {uploadProgress}%</p>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div 
+                        className="bg-blue-600 h-2.5 rounded-full" 
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
                   </div>
                 )}
                 

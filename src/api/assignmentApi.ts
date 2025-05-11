@@ -183,8 +183,55 @@ export const getSubmissions = async (assignmentId: string | number): Promise<any
  */
 export const submitAssignment = async (assignmentId: string | number, submission: any): Promise<any> => {
   try {
-    const response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submission);
-    console.log('API response for submission:', response.data);
+    // Extract files from submission data if they exist
+    const files = submission.files ? [...submission.files] : [];
+    
+    // Create a copy of submission without the file objects (to prevent circular references)
+    const submissionData = { ...submission };
+    
+    // Replace file objects with just the metadata
+    if (submissionData.files && Array.isArray(submissionData.files)) {
+      submissionData.files = submissionData.files.map(file => {
+        // If it's a File object, extract its metadata
+        if (file instanceof File) {
+          return {
+            name: file.name,
+            type: file.type,
+            size: file.size
+          };
+        }
+        return file;
+      });
+    }
+    
+    // Make API call to create the submission
+    const response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submissionData);
+    
+    console.log('API response for submission creation:', response.data);
+    
+    // If we have actual File objects and the submission was created successfully
+    // we could call a separate endpoint to handle file uploads
+    if (files.length > 0 && response.data && response.data.id) {
+      try {
+        // Import the file upload API lazily to avoid circular dependencies
+        const { uploadSubmissionFiles } = await import('./fileUploadApi');
+        
+        // Upload the files and associate them with this submission
+        const uploadedFiles = await uploadSubmissionFiles(
+          assignmentId, 
+          files.filter(f => f instanceof File)
+        );
+        
+        // Add the uploaded files to the response
+        response.data.files = uploadedFiles;
+        
+        console.log('Files uploaded successfully:', uploadedFiles);
+      } catch (uploadError) {
+        console.error('Error uploading files:', uploadError);
+        // Continue with the submission even if file upload fails
+      }
+    }
+    
     return response.data;
   } catch (error) {
     return handleApiError(error, 'Error submitting assignment');

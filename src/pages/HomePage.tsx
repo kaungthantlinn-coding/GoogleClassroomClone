@@ -147,30 +147,6 @@ export default function HomePage() {
     }
   };
 
-  // Function to clear all created classes
-  const clearCreatedClasses = () => {
-    if (window.confirm('Are you sure you want to clear all created classes?')) {
-      // Get all courses and delete them via API, but filter out any with invalid IDs
-      courses?.filter(course => course.id && course.id !== 'undefined').forEach(course => {
-        deleteCourse(course.id)
-          .then(() => {
-            console.log(`Deleted course: ${course.id}`);
-          })
-          .catch(error => {
-            console.error(`Failed to delete course ${course.id}:`, error);
-          });
-      });
-      
-      // Refresh the courses list
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      
-      // Dispatch event to update sidebar
-      const clearEvent = new CustomEvent('class-removed', {
-        detail: { action: 'clearAll' }
-      });
-      window.dispatchEvent(clearEvent);
-    }
-  };
 
   // Function to archive a class
   const handleArchiveClass = (course: Course) => {
@@ -840,21 +816,6 @@ export default function HomePage() {
       
       <div className="p-6 bg-gray-50 min-h-screen">
         <div className="flex justify-between items-center mb-6">
-          {/* Only show clear classes button for teachers */}
-          {!isStudent && (
-            <div className="flex gap-4" key="controls-container">
-              <button
-                key="clear-classes-button"
-                onClick={clearCreatedClasses}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
-                title="Clear all created classes"
-              >
-                <Trash2 size={16} />
-                <span>Clear created classes</span>
-              </button>
-            </div>
-          )}
-          
           {/* Show join class button for students */}
           {isStudent && (
             <div className="flex gap-4" key="student-controls">
@@ -988,35 +949,6 @@ export default function HomePage() {
                         </div>
                       )}
                     </div>
-                    
-                    {/* Edit and Archive buttons - only shown to teachers */}
-                    {!isStudent && (
-                      <div className="absolute top-3 right-10 flex space-x-1" key={`edit-buttons-${courseKey}`}>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openEditForm(course);
-                          }}
-                          className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
-                          title="Edit class"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleArchiveClass(course);
-                          }}
-                          className="text-white bg-white/20 hover:bg-white/30 opacity-90 hover:opacity-100 z-20 p-1.5 rounded-full transition-all duration-200"
-                          title="Archive class"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
