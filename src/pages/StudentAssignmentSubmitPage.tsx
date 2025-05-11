@@ -6,7 +6,7 @@ import { Textarea } from '../components/ui/textarea';
 import * as assignmentApi from '../api/assignmentApi';
 import { unsubmitAssignment, submitAssignment } from '../api/assignmentApi';
 import * as storageApi from '../api/storageApi';
-import axios from 'axios';
+import axios, { AxiosProgressEvent } from 'axios';
 import FileUpload from '../components/FileUpload';
 
 interface AssignmentDetails {
@@ -18,6 +18,16 @@ interface AssignmentDetails {
   dueDate?: string;
   className: string;
   section?: string;
+}
+
+// Define interface for the API response types
+interface SubmissionFile {
+  name: string;
+  type?: string;
+  size?: number;
+  url?: string;
+  attachmentId?: string | number;
+  id?: string | number;
 }
 
 const StudentAssignmentSubmitPage: React.FC = () => {
@@ -169,7 +179,7 @@ const StudentAssignmentSubmitPage: React.FC = () => {
           const [url, data, config] = args;
           const uploadConfig = {
             ...config,
-            onUploadProgress: (progressEvent) => {
+            onUploadProgress: (progressEvent: AxiosProgressEvent) => {
               const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
               setUploadProgress(percentCompleted);
               console.log(`Upload progress: ${percentCompleted}%`);
@@ -194,13 +204,65 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       // Save submission ID in state for later use (unsubmit, edit, etc.)
       setCurrentSubmissionId(submissionResult.id);
       
+      // Log the entire submission result to help debug
+      console.log('Full submission result:', JSON.stringify(submissionResult));
+      
       // Get the file information from the API response if available,
       // otherwise use the local files
-      const fileInfo = submissionResult.files || files.map(file => ({
-        name: file.name,
-        size: file.size,
-        id: submissionResult.id ? `${submissionResult.id}-${file.name}` : undefined
-      }));
+      let fileInfo: any[] = [];
+      
+      console.log('Full submission response structure:', JSON.stringify(submissionResult, null, 2));
+      
+      // Enhanced logic to find files in different possible response structures
+      if (submissionResult.files && Array.isArray(submissionResult.files) && submissionResult.files.length > 0) {
+        // Files are directly in the response
+        console.log('Found files in submissionResult.files:', submissionResult.files);
+        fileInfo = submissionResult.files.map((file: SubmissionFile) => ({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          url: file.url,
+          id: file.attachmentId || file.id
+        }));
+      } else if (submissionResult.attachments && Array.isArray(submissionResult.attachments) && submissionResult.attachments.length > 0) {
+        // Files might be in an attachments array
+        console.log('Found files in submissionResult.attachments:', submissionResult.attachments);
+        fileInfo = submissionResult.attachments.map((file: SubmissionFile) => ({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          url: file.url,
+          id: file.attachmentId || file.id
+        }));
+      } else if (submissionResult.success && submissionResult.success.files && Array.isArray(submissionResult.success.files)) {
+        // Files might be nested in a success property
+        console.log('Found files in submissionResult.success.files:', submissionResult.success.files);
+        fileInfo = submissionResult.success.files.map((file: SubmissionFile) => ({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          url: file.url,
+          id: file.attachmentId || file.id
+        }));
+      } else if (files.length > 0) {
+        // If no files in response but we have local files, use those
+        console.log('Using local files as fallback:', files);
+        fileInfo = files.map(file => ({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          id: submissionResult.submissionId 
+            ? `${submissionResult.submissionId}-${file.name}` 
+            : (submissionResult.id ? `${submissionResult.id}-${file.name}` : undefined)
+        }));
+        
+        // Store submissionId for correct reference
+        if (submissionResult.submissionId && !submissionResult.id) {
+          submissionResult.id = submissionResult.submissionId;
+        }
+      }
+      
+      console.log('Processed file info for display:', fileInfo);
       
       // Save submitted files for display in success view
       setSubmittedFiles(fileInfo);
@@ -325,7 +387,7 @@ const StudentAssignmentSubmitPage: React.FC = () => {
                           <div className="bg-gray-200 w-6 h-6 flex items-center justify-center rounded mr-2">
                             <span className="text-gray-600 text-xs">📄</span>
                           </div>
-                          <span className="text-sm">871f39ad-784f-40be-8790-ce188c410fa5.jpg</span>
+                          <span className="text-sm">No files available</span>
                         </div>
                       )}
                       

@@ -9,6 +9,7 @@ import { useStudentData, Student } from '../contexts/StudentDataContext';
 import * as storageApi from '../api/storageApi';
 import * as assignmentApi from '../api/assignmentApi';
 import { downloadSubmissionFile } from '../api/fileUploadApi';
+import SubmissionFileUpload from '../components/SubmissionFileUpload';
 
 interface StudentSubmission {
   id: string;
@@ -363,13 +364,14 @@ const StudentSubmissionPage: React.FC = () => {
   }, [submission, points, feedback, sendEmail, handleBackToSubmissions]);
   
   // Handle file download
-  const handleFileDownload = useCallback(async (file: {name: string, id?: string}) => {
+  const handleFileDownload = useCallback(async (file: {name: string, id?: string | number, type?: string}) => {
     try {
       const fileId = file.id || `${submission?.id}-${file.name}`;
       
       // Check if we have a proper file ID
       if (!fileId) {
         console.error('Cannot download file: Missing file ID');
+        alert('This file cannot be downloaded because it is missing an ID.');
         return;
       }
       
@@ -380,6 +382,7 @@ const StudentSubmissionPage: React.FC = () => {
         await downloadSubmissionFile(fileId, file.name);
       } catch (downloadError) {
         console.error('Error downloading file from API:', downloadError);
+        alert('Failed to download file. Please try again.');
         
         // Fallback for demo purposes - create a mock download
         const a = document.createElement('a');
@@ -391,6 +394,39 @@ const StudentSubmissionPage: React.FC = () => {
       console.error('Error in file download:', error);
     }
   }, [submission?.id]);
+  
+  // Handle successful file upload
+  const handleUploadSuccess = useCallback((fileData: any) => {
+    console.log('File uploaded successfully:', fileData);
+    
+    // Refresh the submission data to include the new file
+    if (assignmentId && studentId) {
+      // Use timeout to allow API to process the upload
+      setTimeout(() => {
+        const loadAssignmentData = async () => {
+          try {
+            const submissionsData = await assignmentApi.getSubmissions(assignmentId);
+            const apiSubmission = submissionsData.find((sub: any) => 
+              sub.userId?.toString() === studentId || sub.submissionId?.toString() === submission?.id
+            );
+            
+            if (apiSubmission && submission) {
+              // Update just the attachedFiles array
+              setSubmission({
+                ...submission,
+                attachedFiles: apiSubmission.files || submission.attachedFiles,
+                submittedDate: apiSubmission.submittedAt || new Date().toISOString()
+              });
+            }
+          } catch (error) {
+            console.error('Error refreshing submission data:', error);
+          }
+        };
+        
+        loadAssignmentData();
+      }, 1000);
+    }
+  }, [assignmentId, studentId, submission]);
   
   // Render access denied message
   if (accessDenied) {
@@ -516,6 +552,19 @@ const StudentSubmissionPage: React.FC = () => {
               )}
             </div>
             
+            {/* File Submission Section - Only visible to students viewing their own work */}
+            {isStudent && studentId === sessionStorage.getItem('user_id') && (
+              <div className="mb-6 border-b pb-6">
+                <SubmissionFileUpload 
+                  assignmentId={assignmentId || ''}
+                  submissionId={submission?.id}
+                  initialFiles={submission?.attachedFiles || []}
+                  onUploadSuccess={handleUploadSuccess}
+                  onUploadError={(error: Error) => console.error('Upload error:', error)}
+                />
+              </div>
+            )}
+
             {/* Attached Files */}
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2">Attached Files:</p>

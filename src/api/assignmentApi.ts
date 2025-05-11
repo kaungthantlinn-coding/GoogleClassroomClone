@@ -104,17 +104,6 @@ export const createAssignment = async (courseId: string | number, assignment: Pa
     console.log('API: Raw assignment creation response:', response.data);
     
     // Check if we got a valid response
-    if (!response.data) {
-      console.warn('API: Empty response when creating assignment');
-      // Return the original data with a temporary ID to prevent errors
-      return {
-        ...assignment as Assignment,
-        id: `temp-${Date.now()}`,
-        createdAt: new Date().toISOString()
-      };
-    }
-    
-    // Determine if the response contains what we need
     const responseData = response.data;
     const hasRequiredFields = responseData.id || responseData.assignmentId || responseData._id;
     
@@ -183,8 +172,11 @@ export const getSubmissions = async (assignmentId: string | number): Promise<any
  */
 export const submitAssignment = async (assignmentId: string | number, submission: any): Promise<any> => {
   try {
+    console.log('Starting submission process for assignment:', assignmentId);
+    
     // Extract files from submission data if they exist
-    const files = submission.files ? [...submission.files] : [];
+    const files = submission.files ? [...submission.files].filter(f => f instanceof File) : [];
+    console.log(`Found ${files.length} files to upload`);
     
     // Create a copy of submission without the file objects (to prevent circular references)
     const submissionData = { ...submission };
@@ -204,36 +196,79 @@ export const submitAssignment = async (assignmentId: string | number, submission
       });
     }
     
-    // Make API call to create the submission
-    const response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submissionData);
+    let uploadedFiles = [];
+    let response;
     
-    console.log('API response for submission creation:', response.data);
-    
-    // If we have actual File objects and the submission was created successfully
-    // we could call a separate endpoint to handle file uploads
-    if (files.length > 0 && response.data && response.data.id) {
+    // Two different approaches depending on whether we have files to upload
+    if (files.length > 0) {
+      // Approach 1: Upload files first, then create submission
       try {
+        console.log('Uploading files before creating submission...');
         // Import the file upload API lazily to avoid circular dependencies
         const { uploadSubmissionFiles } = await import('./fileUploadApi');
         
-        // Upload the files and associate them with this submission
-        const uploadedFiles = await uploadSubmissionFiles(
+        // Upload files without a submissionId first
+        uploadedFiles = await uploadSubmissionFiles(assignmentId, files);
+        console.log('Files uploaded successfully before submission:', uploadedFiles);
+        
+        // Add uploaded files metadata to submission data
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          submissionData.files = uploadedFiles;
+          submissionData.attachments = uploadedFiles;
+        }
+        
+        // Now create the submission with file metadata
+        response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submissionData);
+        console.log('Submission created with file metadata:', response.data);
+      } catch (error) {
+        console.error('Error in file-first approach:', error);
+        // If file upload fails, fall back to creating submission first
+        response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submissionData);
+        console.log('Fallback: Submission created without files:', response.data);
+      }
+    } else {
+      // Approach 2: Just create the submission (no files)
+      response = await assignmentApi.post(`/assignments/${assignmentId}/submissions`, submissionData);
+      console.log('Submission created (no files):', response.data);
+    }
+    
+    // Make sure response data exists
+    if (!response || !response.data) {
+      throw new Error('No response from submission API');
+    }
+    
+    // If we have files but couldn't upload them before, or they weren't associated
+    // Try uploading them again with the submission ID
+    if (files.length > 0 && 
+        response.data && 
+        response.data.submissionId && 
+        (!response.data.files || !response.data.files.length)) {
+      try {
+        console.log('Uploading files with submission ID:', response.data.submissionId);
+        const { uploadSubmissionFiles } = await import('./fileUploadApi');
+        
+        // Upload files with the submission ID
+        uploadedFiles = await uploadSubmissionFiles(
           assignmentId, 
-          files.filter(f => f instanceof File)
+          files,
+          response.data.submissionId
         );
         
-        // Add the uploaded files to the response
-        response.data.files = uploadedFiles;
+        console.log('Files uploaded with submission ID:', uploadedFiles);
         
-        console.log('Files uploaded successfully:', uploadedFiles);
+        // Add the uploaded files to the response
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          response.data.files = uploadedFiles;
+          response.data.attachments = uploadedFiles;
+        }
       } catch (uploadError) {
-        console.error('Error uploading files:', uploadError);
-        // Continue with the submission even if file upload fails
+        console.error('Error uploading files with submission ID:', uploadError);
       }
     }
     
     return response.data;
   } catch (error) {
+    console.error('Error in submission process:', error);
     return handleApiError(error, 'Error submitting assignment');
   }
 };
