@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, Users, Calendar, Upload, Link as LinkIcon, Plus, FileText } from 'lucide-react';
 import { Material, saveMaterial } from '../types/material';
 import { useParams } from 'react-router-dom';
+import { uploadMaterialFile } from '../api/materialApi';
 
 interface MaterialModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ interface Attachment {
   name: string;
   url: string;
   thumbnail?: string;
+  file?: File; // For file uploads
+  fileId?: number; // For uploaded files that have an ID
 }
 
 const MaterialModal: React.FC<MaterialModalProps> = ({
@@ -145,7 +148,11 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
       title,
       description,
       topic,
-      attachments,
+      attachments: attachments.map(att => {
+        // Don't include the File object in the data sent to API
+        const { file, ...rest } = att;
+        return rest;
+      }),
       assignTo,
       scheduledFor,
     };
@@ -159,6 +166,8 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
     }
 
     try {
+      let savedMaterialId: string;
+      
       // If we're editing an existing material, include the ID
       if (materialToEdit) {
         // Create updated material object with the existing ID
@@ -173,10 +182,9 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
         };
         
         // Save the updated material
-        await saveMaterial(updatedMaterial);
+        const savedMaterial = await saveMaterial(updatedMaterial);
+        savedMaterialId = savedMaterial.id;
         
-        // Notify parent component
-        onSubmit(materialData, materialToEdit.id);
       } else {
         // Create a new material - let the API generate the ID
         const newMaterial: Partial<Material> = {
@@ -189,10 +197,52 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
         
         // Save the material
         const savedMaterial = await saveMaterial(newMaterial);
-        
-        // Notify parent component
-        onSubmit(materialData, savedMaterial.id);
+        savedMaterialId = savedMaterial.id;
       }
+      
+      // Validate that we have a valid material ID before proceeding with file uploads
+      if (!savedMaterialId) {
+        console.error('Cannot upload files: No valid material ID was returned from the API');
+        throw new Error('Material ID is required for file uploads');
+      }
+      
+      console.log(`Material saved successfully with ID: ${savedMaterialId}`);
+      
+      // Only proceed with file uploads if we have attachments and a valid ID
+      const fileAttachments = attachments.filter(attachment => 
+        attachment.type === 'file' && attachment.file
+      );
+      
+      if (fileAttachments.length > 0 && savedMaterialId) {
+        console.log(`Uploading ${fileAttachments.length} files for material ID: ${savedMaterialId}`);
+        
+        // Upload files one by one to better handle errors
+        for (const attachment of fileAttachments) {
+          try {
+            if (attachment.file) {
+              console.log(`Processing file upload: ${attachment.name} for material ID: ${savedMaterialId}`);
+              const response = await uploadMaterialFile(savedMaterialId, attachment.file);
+              console.log(`File upload response:`, response);
+              
+              // If the API returns a fileId, update the attachment with the file ID
+              if (response && response.fileId) {
+                attachment.fileId = response.fileId;
+                console.log(`File ID ${response.fileId} assigned to attachment ${attachment.name}`);
+              }
+            }
+          } catch (error) {
+            console.error(`Error uploading file ${attachment.name}:`, error);
+            // Continue with other files even if one fails
+          }
+        }
+        
+        console.log('All file uploads completed');
+      } else {
+        console.log('No files to upload for this material');
+      }
+      
+      // Notify parent component
+      onSubmit(materialData, savedMaterialId);
       
       resetForm();
       onClose();
@@ -202,16 +252,27 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
     }
   };
 
-  const handleAddAttachment = (type: Attachment['type']) => {
-    // For demonstration, we'll just add a placeholder attachment
-    // In a real app, you would handle file uploads, Google Drive integration, etc.
-    const newAttachment: Attachment = {
-      type,
-      name: `Sample ${type} attachment`,
-      url: '#',
-    };
-    
-    setAttachments([...attachments, newAttachment]);
+  const handleAddAttachment = (type: Attachment['type'], file?: File) => {
+    if (type === 'file' && file) {
+      // For file uploads, we'll set a temporary attachment first
+      const newAttachment: Attachment = {
+        type,
+        name: file.name,
+        url: '#', // Temporary URL until upload completes
+        file: file, // Store file reference for actual upload when material is saved
+      };
+      
+      setAttachments([...attachments, newAttachment]);
+    } else {
+      // For other types (drive, youtube, link), add placeholder
+      const newAttachment: Attachment = {
+        type,
+        name: `${type === 'drive' ? 'Google Drive' : type === 'youtube' ? 'YouTube' : 'Link'} attachment`,
+        url: '#',
+      };
+      
+      setAttachments([...attachments, newAttachment]);
+    }
   };
 
   const handleRemoveAttachment = (index: number) => {
@@ -359,7 +420,10 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
                           const file = e.target.files[0];
-                          handleAddAttachment('file');
+                          // Pass the file to handleAddAttachment
+                          handleAddAttachment('file', file);
+                          // Reset the file input for future uploads
+                          e.target.value = '';
                         }
                       }}
                     />

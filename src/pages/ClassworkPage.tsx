@@ -31,6 +31,10 @@ const ClassworkPage = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   
+  // Get user role from localStorage or sessionStorage to determine if the user is a student
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role') || '';
+  const isStudent = userRole.toLowerCase() === 'student';
+
   // State for editing
   const [currentEditingAssignment, setCurrentEditingAssignment] = useState<string | null>(null);
   const [currentEditingMaterial, setCurrentEditingMaterial] = useState<string | null>(null);
@@ -283,20 +287,21 @@ const ClassworkPage = () => {
   return (
     <div className="max-w-[1000px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6">
 
-      {/* Create Button */}
-      <div className="relative mb-4 sm:mb-6">
-        <button
-          onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-          className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-1.5 sm:py-2 bg-[#1a73e8] text-white rounded-full text-xs sm:text-sm font-medium hover:bg-[#1557b0] transition-colors"
-        >
-          <Plus size={16} className="sm:w-5 sm:h-5" />
-          Create
-        </button>
+      {/* Create Button - Only shown for teachers */}
+      {!isStudent && (
+        <div className="relative mb-4 sm:mb-6">
+          <button
+            onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+            className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-1.5 sm:py-2 bg-[#1a73e8] text-white rounded-full text-xs sm:text-sm font-medium hover:bg-[#1557b0] transition-colors"
+          >
+            <Plus size={16} className="sm:w-5 sm:h-5" />
+            Create
+          </button>
 
-        {/* Create Menu Dropdown */}
-        {isCreateMenuOpen && (
-          <div className="absolute top-full left-0 mt-1 w-56 sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-            <button 
+          {/* Create Menu Dropdown */}
+          {isCreateMenuOpen && (
+            <div className="absolute top-full left-0 mt-1 w-56 sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+              <button 
               onClick={() => {
                 setCurrentEditingAssignment(null); // Ensure we're creating a new assignment
                 setShowAssignmentForm(true);
@@ -323,9 +328,10 @@ const ClassworkPage = () => {
               <FileText size={16} className="sm:w-5 sm:h-5 text-gray-600" />
               Material
             </button>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Assignment Modal */}
       <AssignmentModal 

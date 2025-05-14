@@ -3,6 +3,7 @@ import * as materialApi from '../api/materialApi';
 
 export interface Material {
   id: string;
+  materialGuid?: string;
   title: string;
   description: string;
   topic: string;
@@ -11,6 +12,9 @@ export interface Material {
     name: string;
     url: string;
     thumbnail?: string;
+    fileId?: number;
+    size?: number;
+    uploadDate?: string;
   }[];
   assignTo: string[];
   scheduledFor: string | null;
@@ -48,18 +52,46 @@ export const getClassMaterials = async (classId: string): Promise<Material[]> =>
 };
 
 // Save a material
-export const saveMaterial = async (material: Material): Promise<Material> => {
+export const saveMaterial = async (material: Partial<Material>): Promise<Material> => {
   try {
     const classId = material.classId || '';
     let savedMaterial: Material;
     
     if (material.id) {
       // Update existing material
+      console.log(`Attempting to update material with ID: ${material.id}`);
       savedMaterial = await materialApi.updateMaterial(material.id, material);
     } else {
       // Create new material
+      console.log(`Attempting to create new material for class: ${classId}`);
       savedMaterial = await materialApi.createMaterial(classId, material);
     }
+    
+    // Validate that we have a proper material object with ID
+    if (!savedMaterial || !savedMaterial.id) {
+      console.error('API did not return a valid material with ID', savedMaterial);
+      
+      // Create a valid material object with a guaranteed ID
+      const tempId = material.id || `temp-material-${Date.now()}`;
+      console.warn(`Creating fallback material with ID: ${tempId}`);
+      
+      savedMaterial = {
+        id: tempId,
+        title: material.title || 'Untitled Material',
+        description: material.description || '',
+        topic: material.topic || 'No topic',
+        attachments: material.attachments || [],
+        assignTo: material.assignTo || ['All students'],
+        scheduledFor: material.scheduledFor || null,
+        className: material.className || '',
+        section: material.section || '',
+        classId: material.classId || classId,
+        createdAt: material.createdAt || new Date().toISOString(),
+        updatedAt: material.updatedAt || new Date().toISOString()
+      };
+    }
+    
+    console.log('Final material object after save:', savedMaterial);
     
     // Dispatch event to notify other components
     const materialEvent = new CustomEvent('materialUpdated', {

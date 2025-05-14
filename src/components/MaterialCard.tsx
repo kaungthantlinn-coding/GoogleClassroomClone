@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, MoreVertical, Edit, Trash, Link as LinkIcon, BookOpen } from 'lucide-react';
+import { MoreVertical, Edit, Trash, BookOpen } from 'lucide-react';
+import MaterialAttachment from './MaterialAttachment';
 
 interface MaterialCardProps {
   id?: string;
@@ -10,6 +11,9 @@ interface MaterialCardProps {
     name: string;
     url: string;
     thumbnail?: string;
+    fileId?: number;
+    size?: number;
+    uploadDate?: string;
   }[];
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -30,7 +34,7 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
   // Get user role from localStorage or sessionStorage
   const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
   const isStudent = userRole?.toLowerCase() === 'student';
-  const isTeacher = userRole?.toLowerCase() === 'teacher' || !isStudent; // Default to teacher if role not set
+  // We only need to check if the user is a student to determine permissions
   
   // Check if we have a valid ID
   const hasValidId = !!id && (typeof id === 'string' || typeof id === 'number');
@@ -105,16 +109,6 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
     };
   }, []);
 
-  // Get icon based on attachment type
-  const getAttachmentIcon = (type: string) => {
-    switch (type) {
-      case 'link':
-        return <LinkIcon size={16} className="text-[#5f6368]" />;
-      default:
-        return <FileText size={16} className="text-[#5f6368]" />;
-    }
-  };
-
   return (
     <>
       <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow" id={`material-${id}`}>
@@ -131,12 +125,12 @@ const MaterialCard: React.FC<MaterialCardProps> = ({
               
               {/* Attachments */}
               {attachments.length > 0 && (
-                <div className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2">
+                <div className="mt-3 space-y-2">
                   {attachments.map((attachment, index) => (
-                    <div key={index} className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-[14px] text-[#3c4043]">
-                      {getAttachmentIcon(attachment.type)}
-                      <span>{attachment.name}</span>
-                    </div>
+                    <MaterialAttachment 
+                      key={index} 
+                      attachment={attachment} 
+                    />
                   ))}
                 </div>
               )}
