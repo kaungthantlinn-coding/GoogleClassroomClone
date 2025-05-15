@@ -2,6 +2,16 @@ import axios, { AxiosError } from 'axios';
 import { Assignment } from '../types/assignment';
 import { getApiBaseUrl } from '../utils/apiMode';
 
+// Define interface for submission file objects
+interface SubmissionFile {
+  name: string;
+  type?: string;
+  size?: number;
+  url?: string;
+  attachmentId?: string | number;
+  id?: string | number;
+}
+
 const API_URL = getApiBaseUrl();
 
 // Create axios instance for assignment API
@@ -167,6 +177,49 @@ export const getSubmissions = async (assignmentId: string | number): Promise<any
 };
 
 /**
+ * Find the most recent submission for a student
+ * This is a helper function that doesn't try to delete anything
+ */
+const findStudentSubmission = async (assignmentId: string | number, studentId: string | number): Promise<any | null> => {
+  try {
+    console.log(`Finding latest submission for student ${studentId} on assignment ${assignmentId}`);
+    
+    try {
+      // First try to get all submissions
+      const submissions = await getSubmissions(assignmentId);
+      
+      // Find all submissions for this student
+      const studentSubmissions = submissions.filter(sub => {
+        const subStudentId = sub.userId || sub.studentId;
+        return subStudentId?.toString() === studentId?.toString();
+      });
+      
+      if (studentSubmissions.length === 0) {
+        console.log('No existing submissions found for this student');
+        return null;
+      }
+      
+      // Sort by date (newest first)
+      const sortedSubmissions = studentSubmissions.sort((a, b) => {
+        const dateA = new Date(a.submittedAt || a.submittedDate || 0).getTime();
+        const dateB = new Date(b.submittedAt || b.submittedDate || 0).getTime();
+        return dateB - dateA;
+      });
+      
+      // Return the most recent submission
+      console.log(`Found ${studentSubmissions.length} submissions, using the most recent one`);
+      return sortedSubmissions[0];
+    } catch (error) {
+      console.warn('Error finding submissions:', error);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error in find process:', error);
+    return null;
+  }
+};
+
+/**
  * Submit assignment (student only)
  * POST: api/assignments/{assignmentId}/submissions
  */
@@ -174,26 +227,131 @@ export const submitAssignment = async (assignmentId: string | number, submission
   try {
     console.log('Starting submission process for assignment:', assignmentId);
     
+    // First, check if the student already has a submission for this assignment
+    // This helps prevent duplicate submissions and ensures complete replacement of files
+    try {
+      console.log('Checking for existing submissions...');
+      const existingSubmissions = await getSubmissions(assignmentId);
+      const studentId = submission.studentId || submission.userId;
+      
+      if (existingSubmissions && Array.isArray(existingSubmissions)) {
+        // Find all submissions for this student
+        const studentSubmissions = existingSubmissions.filter(sub => 
+          (sub.userId?.toString() === studentId || sub.studentId?.toString() === studentId)
+        );
+        
+        console.log(`Found ${studentSubmissions.length} existing submissions for student ${studentId}`);
+        
+        // Handle each existing submission to ensure proper cleanup
+        if (studentSubmissions.length > 0) {
+          // Sort by date (newest first) to find the most recent submission
+          const sortedSubmissions = studentSubmissions.sort((a, b) => {
+            const dateA = new Date(a.submittedAt || a.submittedDate || 0).getTime();
+            const dateB = new Date(b.submittedAt || b.submittedDate || 0).getTime();
+            return dateB - dateA;
+          });
+          
+          // Delete and completely replace ALL previous submissions
+          // This is the only reliable way to ensure old files don't persist
+          for (const prevSubmission of sortedSubmissions) {
+            console.log(`Processing existing submission to COMPLETELY REMOVE: ${prevSubmission.submissionId || prevSubmission.id}`);
+            
+            // First try to unsubmit through the API
+            const submissionIdToUnsubmit = prevSubmission.submissionId || prevSubmission.id;
+            if (submissionIdToUnsubmit) {
+              try {
+                console.log(`Unsubmitting existing submission: ${submissionIdToUnsubmit}`);
+                await unsubmitAssignment(submissionIdToUnsubmit);
+                console.log(`Successfully unsubmitted previous submission: ${submissionIdToUnsubmit}`);
+                
+                // Also try to directly delete the submission if possible
+                try {
+                  console.log(`Attempting direct deletion of submission: ${submissionIdToUnsubmit}`);
+                  await assignmentApi.delete(`/submissions/${submissionIdToUnsubmit}`);
+                  console.log(`Successfully deleted previous submission: ${submissionIdToUnsubmit}`);
+                } catch (deleteError) {
+                  console.log(`Direct deletion not supported or failed: ${deleteError}`);
+                  // Continue even if deletion fails
+                }
+              } catch (unsubmitError) {
+                console.warn(`Error unsubmitting previous submission ${submissionIdToUnsubmit}, continuing:`, unsubmitError);
+              }
+            }
+          }
+          
+          // Add a longer delay to ensure backend has fully processed all deletion operations
+          console.log('Waiting for backend to process all submission deletions...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (checkError) {
+      console.warn('Error checking for existing submissions, continuing with new submission:', checkError);
+    }
+    
+    // Check if we have an existing submission - we'll use this in our request to ensure proper replacement
+    // of files rather than adding to them
+    let existingSubmissionId = null;
+    try {
+      const existingSubmission = await findStudentSubmission(assignmentId, submission.studentId || submission.userId);
+      if (existingSubmission) {
+        console.log('Found existing submission that will be replaced:', existingSubmission.id || existingSubmission.submissionId);
+        existingSubmissionId = existingSubmission.id || existingSubmission.submissionId;
+        
+        // Try to unsubmit the existing submission if we have an ID
+        if (existingSubmissionId) {
+          try {
+            await unsubmitAssignment(existingSubmissionId);
+            console.log(`Successfully unsubmitted previous submission: ${existingSubmissionId}`);
+          } catch (unsubError) {
+            console.warn(`Unable to unsubmit previous submission: ${unsubError}`);
+          }
+        }
+      } else {
+        console.log('No existing submission found - creating new submission');
+      }
+    } catch (findError) {
+      console.warn('Error checking for existing submissions:', findError);
+    }
+    
     // Extract files from submission data if they exist
     const files = submission.files ? [...submission.files].filter(f => f instanceof File) : [];
     console.log(`Found ${files.length} files to upload`);
     
-    // Create a copy of submission without the file objects (to prevent circular references)
-    const submissionData = { ...submission };
+    // Create a completely fresh submission data object
+    // This ensures no stale data persists
+    const submissionData: any = {
+      assignmentId: submission.assignmentId,
+      studentId: submission.studentId || submission.userId,
+      studentName: submission.studentName || submission.userName,
+      submittedDate: new Date().toISOString(), // Always use current timestamp
+      status: 'submitted',
+      comment: submission.comment || ''
+    };
     
-    // Replace file objects with just the metadata
-    if (submissionData.files && Array.isArray(submissionData.files)) {
-      submissionData.files = submissionData.files.map(file => {
-        // If it's a File object, extract its metadata
-        if (file instanceof File) {
-          return {
-            name: file.name,
-            type: file.type,
-            size: file.size
-          };
-        }
-        return file;
-      });
+    // Process files - convert File objects to metadata
+    const processedFiles = files.map((file: File) => {
+      if (file instanceof File) {
+        return {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          url: URL.createObjectURL(file), // Create temporary URL for local preview
+          timestamp: new Date().toISOString(), // Add upload timestamp to help with sorting
+          // Add id field to ensure file is uniquely identifiable after page reload
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${file.name}`
+        };
+      }
+      return file as unknown as SubmissionFile;
+    });
+    
+    // Use the processed files array
+    submissionData.files = processedFiles;
+    
+    // Add a submissionContent field if one doesn't exist
+    if (!submissionData.submissionContent && submissionData.comment) {
+      submissionData.submissionContent = submissionData.comment;
+    } else if (!submissionData.submissionContent && files.length > 0) {
+      submissionData.submissionContent = 'File submission';
     }
     
     let uploadedFiles = [];
@@ -213,8 +371,30 @@ export const submitAssignment = async (assignmentId: string | number, submission
         
         // Add uploaded files metadata to submission data
         if (uploadedFiles && uploadedFiles.length > 0) {
-          submissionData.files = uploadedFiles;
-          submissionData.attachments = uploadedFiles;
+          // Process uploaded files to ensure they have all required fields for persistence
+          const enrichedFiles = uploadedFiles.map(file => ({
+            ...file,
+            // Ensure every file has these critical fields
+            name: file.name || file.fileName || 'unnamed-file',
+            type: file.type || file.mimeType || 'application/octet-stream',
+            id: file.id || file.attachmentId || `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            // Store the link permanently in localStorage as a backup
+            persistenceKey: `file_${assignmentId}_${file.name}`,
+            // Mark this file as a submission attachment for filtering
+            isSubmissionAttachment: true
+          }));
+
+          // Store in both places to maximize chances of persistence
+          submissionData.files = enrichedFiles;
+          submissionData.attachments = enrichedFiles;
+          
+          // Also store the files in localStorage as a backup mechanism
+          try {
+            localStorage.setItem(`assignment_${assignmentId}_files`, JSON.stringify(enrichedFiles));
+            console.log('Backed up submission files to localStorage');
+          } catch (e) {
+            console.warn('Failed to back up files to localStorage:', e);
+          }
         }
         
         // Now create the submission with file metadata

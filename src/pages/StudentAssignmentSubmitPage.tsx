@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Upload, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { ChevronLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
@@ -46,7 +46,7 @@ const StudentAssignmentSubmitPage: React.FC = () => {
   
   const [success, setSuccess] = useState(initialState.success);
   const [error, setError] = useState<string | null>(null);
-  const [submittedFiles, setSubmittedFiles] = useState<Array<{name: string, size?: number}>>(initialState.files);
+  // We no longer need to track submittedFiles separately, as we'll use the files state directly
   const [currentSubmissionId, setCurrentSubmissionId] = useState<string>(initialState.submissionId || '');
   
   // Get user information
@@ -70,6 +70,8 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       setLoading(true);
       
       try {
+        // Files will be reset elsewhere in the unsubmit flow
+        
         // Default values in case API call fails
         let assignmentData: AssignmentDetails = {
           id: assignmentId || '',
@@ -120,17 +122,41 @@ const StudentAssignmentSubmitPage: React.FC = () => {
     loadAssignmentData();
   }, [assignmentId, classId]);
   
-  // Save submission state to localStorage whenever it changes
+  // Save submission state to localStorage AND sessionStorage whenever it changes
+  // But only save the CURRENT files, not any previous ones
   useEffect(() => {
     if (assignmentId) {
+      // Create a comprehensive state object with all necessary file metadata
       const stateToSave = {
         success,
-        files: submittedFiles,
-        submissionId: currentSubmissionId
+        // Process files to ensure they have all required fields for persistence
+        files: success ? files.map(file => ({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          // Add fields that ensure persistence across page navigation
+          id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${file.name}`,
+          url: file instanceof File ? URL.createObjectURL(file) : undefined,
+          persistenceKey: `file_${assignmentId}_${file.name}`
+        })) : [],
+        submissionId: currentSubmissionId,
+        timestamp: new Date().toISOString()
       };
+      
+      // Save to localStorage for long-term persistence
       localStorage.setItem(storageKey, JSON.stringify(stateToSave));
+      
+      // Also save to sessionStorage for faster access during the session
+      sessionStorage.setItem(`session_${storageKey}`, JSON.stringify(stateToSave));
+      
+      // Save a global reference to the active submission for cross-page access
+      if (success) {
+        localStorage.setItem(`assignment_${assignmentId}_files`, JSON.stringify(stateToSave.files));
+        // Also save in session for quick access
+        sessionStorage.setItem(`active_submission_${assignmentId}`, JSON.stringify(stateToSave));
+      }
     }
-  }, [success, submittedFiles, currentSubmissionId, assignmentId, storageKey]);
+  }, [success, files, currentSubmissionId, assignmentId, storageKey]);
   
   // Add a new state for upload progress
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -150,6 +176,18 @@ const StudentAssignmentSubmitPage: React.FC = () => {
     setIsUploading(true);
     setUploadProgress(0);
     setError(null);
+    
+    // We're using the files state directly in the success view, so no need to set any additional state
+    
+    // When submitting again, we want to make sure we're creating a completely new submission
+    // if the edit button was used - this ensures we don't use any stale submission IDs
+    if (!currentSubmissionId) {
+      console.log('Creating brand new submission with files:', files.map(f => f.name));
+    } else {
+      console.log(`Replacing submission ${currentSubmissionId} with new files:`, files.map(f => f.name));
+      // Clear the old submission ID to ensure we create a fresh one
+      setCurrentSubmissionId('');
+    }
     
     try {
       // Prepare submission data with the actual File objects
@@ -264,9 +302,6 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       
       console.log('Processed file info for display:', fileInfo);
       
-      // Save submitted files for display in success view
-      setSubmittedFiles(fileInfo);
-      
       // Show success state immediately
       setSuccess(true);
       // No automatic navigation
@@ -279,12 +314,41 @@ const StudentAssignmentSubmitPage: React.FC = () => {
     }
   };
   
-  const handleUnsubmit = () => {
-    // In a real implementation, you would call an API to remove the submission
-    console.log('Unsubmitting assignment...');
+  const handleUnsubmit = async () => {
+    console.log('Editing submission...');
     
-    // Return to edit mode
-    setSuccess(false);
+    try {
+      // If we have a submission ID, we need to properly unsubmit first
+      if (currentSubmissionId) {
+        console.log(`Unsubmitting current submission ${currentSubmissionId} before edit`);
+        try {
+          // Call the unsubmit API to ensure we're starting fresh
+          await unsubmitAssignment(currentSubmissionId);
+          console.log('Successfully unsubmitted for editing');
+          
+          // Clear the current submission ID to ensure we create a completely new submission
+          setCurrentSubmissionId('');
+          
+          // Remove from localStorage to start completely fresh
+          localStorage.removeItem(storageKey);
+        } catch (error) {
+          console.warn('Error unsubmitting before edit, continuing anyway:', error);
+        }
+      }
+      
+      // Return to edit mode
+      setSuccess(false);
+      
+      // Reset ALL files and state to start completely fresh
+      setFiles([]);
+      setComment('');
+      setUploadProgress(0);
+      setIsUploading(false);
+      setError(null);
+    } catch (error) {
+      console.error('Error preparing submission for edit:', error);
+      setError('Failed to prepare for editing. Please try refreshing the page.');
+    }
   };
   
   const formatDate = (dateString?: string) => {
@@ -373,8 +437,9 @@ const StudentAssignmentSubmitPage: React.FC = () => {
                     
                     <div className="w-full max-w-md">
                       <p className="text-sm font-medium text-gray-700 mb-2">Submitted files:</p>
-                      {submittedFiles.length > 0 ? (
-                        submittedFiles.map((file, index) => (
+                      {files.length > 0 ? (
+                        // Show ONLY the files that were just uploaded in this session
+                        files.map((file, index) => (
                           <div key={index} className="bg-gray-50 rounded p-3 flex items-center text-gray-700 mb-2">
                             <div className="bg-gray-200 w-6 h-6 flex items-center justify-center rounded mr-2">
                               <span className="text-gray-600 text-xs">📄</span>
@@ -421,11 +486,13 @@ const StudentAssignmentSubmitPage: React.FC = () => {
                               console.log('No submission ID found, just resetting UI state');
                             }
                             
-                            // Clear files and reset state
+                            // Completely reset all submission state
                             setFiles([]);
                             setComment('');
-                            setSubmittedFiles([]);
                             setSuccess(false);
+                            setUploadProgress(0);
+                            setIsUploading(false);
+                            setError(null);
                           }}
                           className="bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-300 mx-auto block w-full font-medium"
                         >

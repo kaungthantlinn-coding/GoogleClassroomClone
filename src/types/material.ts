@@ -1,4 +1,3 @@
-import { User } from './user';
 import * as materialApi from '../api/materialApi';
 
 export interface Material {
@@ -26,8 +25,7 @@ export interface Material {
   color?: string;
 }
 
-// Local storage key for materials
-const MATERIALS_STORAGE_KEY = 'classroom_materials';
+// Note: This service now uses API calls instead of local storage
 
 // Get all materials - this method is not used with real API
 export const getAllMaterials = async (): Promise<Material[]> => {

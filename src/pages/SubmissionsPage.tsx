@@ -150,8 +150,44 @@ const SubmissionsPage: React.FC = () => {
             };
           });
           
+          // De-duplicate submissions by student ID
+          // If a student has multiple submissions, prioritize graded > submitted > late > missing
+          const uniqueSubmissions: { [key: string]: Submission } = {};
+          
+          // First, group by student ID
+          mappedSubmissions.forEach(submission => {
+            const existingSubmission = uniqueSubmissions[submission.studentId];
+            
+            // Priority: graded > submitted > late > missing
+            if (!existingSubmission) {
+              // No existing submission for this student, add it
+              uniqueSubmissions[submission.studentId] = submission;
+            } else {
+              // Submission already exists, check if this one has higher priority
+              const newPriority = submission.status === 'graded' ? 3 : 
+                                 submission.status === 'submitted' ? 2 : 
+                                 submission.status === 'late' ? 1 : 0;
+                                 
+              const existingPriority = existingSubmission.status === 'graded' ? 3 : 
+                                     existingSubmission.status === 'submitted' ? 2 : 
+                                     existingSubmission.status === 'late' ? 1 : 0;
+              
+              // If new submission has higher priority or same priority but more recent
+              if (newPriority > existingPriority || 
+                 (newPriority === existingPriority && 
+                  submission.submittedDate && existingSubmission.submittedDate && 
+                  new Date(submission.submittedDate) > new Date(existingSubmission.submittedDate))) {
+                uniqueSubmissions[submission.studentId] = submission;
+              }
+            }
+          });
+          
+          // Convert back to array
+          const deduplicatedSubmissions = Object.values(uniqueSubmissions);
+          
           console.log('Mapped submissions:', mappedSubmissions);
-          setSubmissions(mappedSubmissions);
+          console.log('De-duplicated submissions:', deduplicatedSubmissions);
+          setSubmissions(deduplicatedSubmissions);
         } else {
           // Set empty array - no default students
           setSubmissions([]);
@@ -163,6 +199,41 @@ const SubmissionsPage: React.FC = () => {
     
     loadSubmissions();
   }, [assignmentId, contextSubmissions]);
+
+  // Process submissions data to group by student and remove duplicates
+  const processedSubmissions = useMemo(() => {
+    if (!submissions || !Array.isArray(submissions)) return [];
+    
+    // Group submissions by student ID
+    const submissionsByStudent: Record<string, any[]> = {};
+    
+    submissions.forEach(submission => {
+      const studentId = submission.studentId;
+      if (!studentId) return; // Skip submissions without student ID
+      
+      if (!submissionsByStudent[studentId]) {
+        submissionsByStudent[studentId] = [];
+      }
+      
+      submissionsByStudent[studentId].push(submission);
+    });
+    
+    // For each student, keep only the most recent submission
+    const uniqueSubmissions = Object.values(submissionsByStudent).map(studentSubmissions => {
+      // Sort by submission date, newest first
+      const sorted = studentSubmissions.sort((a, b) => {
+        const dateA = new Date(a.submittedDate || 0).getTime();
+        const dateB = new Date(b.submittedDate || 0).getTime();
+        return dateB - dateA;
+      });
+      
+      // Return only the most recent submission
+      return sorted[0];
+    });
+    
+    console.log(`Filtered ${submissions.length} submissions to ${uniqueSubmissions.length} unique student submissions`);
+    return uniqueSubmissions;
+  }, [submissions]);
 
   // Store class data for API cache consistency
   useEffect(() => {
@@ -184,14 +255,14 @@ const SubmissionsPage: React.FC = () => {
 
   // Filtered submissions based on search term
   const filteredSubmissions = useMemo(() => {
-    if (!searchTerm) return submissions;
+    if (!searchTerm) return processedSubmissions;
 
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return submissions.filter(submission =>
+    return processedSubmissions.filter(submission =>
       submission.studentName.toLowerCase().includes(lowerSearchTerm) ||
       submission.studentId.toLowerCase().includes(lowerSearchTerm)
     );
-  }, [submissions, searchTerm]);
+  }, [processedSubmissions, searchTerm]);
 
   // Grade All modal state
   const [showGradeAllModal, setShowGradeAllModal] = useState(false);

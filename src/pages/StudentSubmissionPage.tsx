@@ -11,6 +11,15 @@ import * as assignmentApi from '../api/assignmentApi';
 import { downloadSubmissionFile } from '../api/fileUploadApi';
 import SubmissionFileUpload from '../components/SubmissionFileUpload';
 
+interface SubmissionFile {
+  id?: string | number;
+  name: string;
+  type?: string;
+  url?: string;
+  size?: number;
+  attachmentId?: string | number;
+}
+
 interface StudentSubmission {
   id: string;
   studentName: string;
@@ -29,10 +38,7 @@ interface StudentSubmission {
     section?: string;
     points: string;
   };
-  attachedFiles: {
-    name: string;
-    type: string;
-  }[];
+  attachedFiles: SubmissionFile[];
 }
 
 // Helper function to get letter grade based on percentage
@@ -111,6 +117,9 @@ const StudentSubmissionPage: React.FC = () => {
   const { students } = useStudentData();
   const student = students?.find((s: Student) => s.id === studentId);
   
+  // State for tracking loading state only
+  // We've removed error state since it was unused
+
   // Load assignment and submission data
   useEffect(() => {
     const loadAssignmentData = async () => {
@@ -179,6 +188,10 @@ const StudentSubmissionPage: React.FC = () => {
           return;
         }
         
+        // First check localStorage for cached files
+        const localStorageKey = `assignment_${assignmentId}_files`;
+        const cachedFiles = localStorage.getItem(localStorageKey);
+        
         // Get submission data from API - first get all submissions for this assignment
         const submissionsData = await assignmentApi.getSubmissions(assignmentId);
         console.log('API submissions for assignment:', submissionsData);
@@ -189,6 +202,58 @@ const StudentSubmissionPage: React.FC = () => {
         );
         
         console.log('Found student submission from API:', apiSubmission);
+        
+        // Get cached files from both localStorage locations
+        const submissionCacheKey = `assignment_${assignmentId}_submission`;
+        const cachedSubmission = localStorage.getItem(submissionCacheKey);
+        
+        // Always check for cached files, regardless of API response
+        if (cachedFiles || cachedSubmission) {
+          try {
+            // Try to get files directly
+            const parsedFiles = cachedFiles ? JSON.parse(cachedFiles) : null;
+            
+            // Try to get files from cached submission
+            const parsedSubmission = cachedSubmission ? JSON.parse(cachedSubmission) : null;
+            const submissionFiles = parsedSubmission?.files || null;
+            
+            console.log('Files from cache:', parsedFiles);
+            console.log('Files from cached submission:', submissionFiles);
+            
+            // Determine which files to use, prioritizing API response if it has files
+            if (apiSubmission) {
+              if (!apiSubmission.files || apiSubmission.files.length === 0) {
+                // API submission has no files, use cached files
+                if (parsedFiles && parsedFiles.length > 0) {
+                  apiSubmission.files = parsedFiles;
+                  console.log('Using files from localStorage cache');
+                } else if (submissionFiles && submissionFiles.length > 0) {
+                  apiSubmission.files = submissionFiles;
+                  console.log('Using files from submission cache');
+                }
+              } else {
+                // API submission has files but might be missing some cached ones
+                // Check if we need to merge to avoid duplicates
+                const apiFilesMap = new Map();
+                apiSubmission.files.forEach((file: any) => {
+                  apiFilesMap.set(file.name, file);
+                });
+                
+                // Add any missing files from cache
+                if (parsedFiles && parsedFiles.length > 0) {
+                  parsedFiles.forEach((cachedFile: any) => {
+                    if (!apiFilesMap.has(cachedFile.name)) {
+                      apiSubmission.files.push(cachedFile);
+                      console.log(`Added missing file from cache: ${cachedFile.name}`);
+                    }
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Error processing cached files:', err);
+          }
+        }
         
         if (apiSubmission) {
           // Get student data from context or create default
@@ -231,9 +296,22 @@ const StudentSubmissionPage: React.FC = () => {
           }
           
           console.log('Created submission data object:', submissionData);
-          setSubmission(submissionData);
-          setFeedback(submissionData.feedback || '');
           
+          // Save submission to sessionStorage for navigation persistence
+          try {
+            const cacheKey = `submission_cache_${assignmentId}_${studentId}`;
+            sessionStorage.setItem(cacheKey, JSON.stringify(submissionData));
+            console.log('Cached submission data in sessionStorage for page navigation');
+          } catch (cacheError) {
+            console.warn('Failed to cache submission in sessionStorage:', cacheError);
+          }
+          
+          setSubmission(submissionData);
+          
+          // Set feedback from API if available
+          if (apiSubmission.feedback) {
+            setFeedback(apiSubmission.feedback);
+          }
           // Update form state when submission has grade data
           if (submissionData.grade) {
             setPoints(submissionData.grade.toString());
@@ -568,31 +646,89 @@ const StudentSubmissionPage: React.FC = () => {
             {/* Attached Files */}
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2">Attached Files:</p>
-              {submission?.attachedFiles && submission.attachedFiles.length > 0 ? (
-                <div className="space-y-2">
-                  {submission.attachedFiles.map((file, index) => (
-                    <div key={index} className="bg-gray-50 rounded p-3 flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="bg-gray-200 w-8 h-8 flex items-center justify-center rounded mr-3">
-                          <span className="text-gray-600 text-xs">📄</span>
+              {(() => {
+                // Get files from multiple sources to ensure they're always displayed
+                let filesToDisplay = [];
+                
+                // 1. First try to get files from the submission object
+                if (submission?.attachedFiles && submission.attachedFiles.length > 0) {
+                  filesToDisplay = submission.attachedFiles;
+                  console.log('Using files from submission object', filesToDisplay);
+                } 
+                // 2. If no files in submission, try localStorage directly
+                else {
+                  try {
+                    // Try all possible localStorage keys
+                    const keys = [
+                      `assignment_${assignmentId}_files`,
+                      `assignment_${assignmentId}_submission`,
+                      `submission_${submission?.id}_files`
+                    ];
+                    
+                    // Try each key until we find files
+                    for (const key of keys) {
+                      const cachedData = localStorage.getItem(key);
+                      if (cachedData) {
+                        const parsed = JSON.parse(cachedData);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                          filesToDisplay = parsed;
+                          console.log(`Found files in localStorage key: ${key}`, filesToDisplay);
+                          break;
+                        } else if (parsed?.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
+                          filesToDisplay = parsed.files;
+                          console.log(`Found files in parsed.files from localStorage key: ${key}`, filesToDisplay);
+                          break;
+                        }
+                      }
+                    }
+                  } catch (err) {
+                    console.warn('Error retrieving cached files:', err);
+                  }
+                }
+                
+                // 3. Deduplicate files based on name or id to avoid duplicates
+                const uniqueFiles: SubmissionFile[] = [];
+                const fileMap = new Map();
+                
+                filesToDisplay.forEach((file: SubmissionFile) => {
+                  const fileId = file.id || file.name;
+                  if (!fileMap.has(fileId)) {
+                    fileMap.set(fileId, true);
+                    uniqueFiles.push(file);
+                  }
+                });
+                
+                // Display the files
+                return uniqueFiles.length > 0 ? (
+                  <div className="mt-4 mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Submitted Files</h3>
+                    <div className="space-y-2">
+                      {uniqueFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center">
+                            <span className="text-blue-600 mr-2">
+                              <Download size={16} />
+                            </span>
+                            <span className="text-sm text-gray-700">{file.name}</span>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleFileDownload(file)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            Download
+                          </Button>
                         </div>
-                        <span className="text-sm font-medium">{file.name}</span>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleFileDownload(file)}
-                        className="flex items-center gap-1 text-xs"
-                      >
-                        <Download className="h-3 w-3" />
-                        Download
-                      </Button>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 italic">No files attached</p>
-              )}
+                  </div>
+                ) : (
+                  <div className="mt-4 mb-6 p-4 bg-gray-50 rounded-md">
+                    <p className="text-gray-500 text-sm">No files submitted</p>
+                  </div>
+                );
+              })()}
             </div>
             
             {/* Student comment */}
