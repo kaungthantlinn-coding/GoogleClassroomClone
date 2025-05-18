@@ -3,10 +3,16 @@ import { useParams } from 'react-router-dom';
 import { UserPlus, MoreVertical, Trash, Check, X } from 'lucide-react';
 import { useStudentData } from '../contexts/StudentDataContext';
 import AddStudentModal from '../components/AddStudentModal';
-import { getCourseMembers, Member, removeMember, addMember, approveStudentEnrollment, rejectStudentEnrollment } from '../api/membersApi';
+import { 
+  getCourseMembers, 
+  Member, 
+  removeMember, 
+  addMember, 
+  getPendingEnrollmentRequests, 
+  processEnrollmentRequest 
+} from '../api/membersApi';
 import { ClassDataContext } from './ClassPage';
 import { useAuthStore } from '../stores/useAuthStore';
-import JoinClassButton from '../components/JoinClassButton';
 
 interface Teacher extends Member {
   role: 'Teacher';
@@ -14,6 +20,8 @@ interface Teacher extends Member {
 
 interface Student extends Member {
   role: 'Student';
+  requestId?: string; // Added for enrollment requests
+  requestDate?: string; // Date when the enrollment request was made
 }
 
 export default function PeoplePage() {
@@ -39,31 +47,31 @@ export default function PeoplePage() {
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Function to add a teacher directly
-  const handleAddTeacher = async () => {
-    if (!classId || !classData.enrollmentCode) return;
-    
-    try {
-      // For testing purposes, add a hardcoded teacher
-      const success = await addMember(classData.enrollmentCode, {
-        name: 'Test Teacher',
-        email: 'teacher@example.com'
-      });
-      
-      if (success) {
-        console.log('Teacher added successfully!');
-        // Refresh the members list
-        window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
-      }
-    } catch (err) {
-      console.error('Error adding teacher:', err);
-      setError('Failed to add teacher. Please try again.');
-    }
-  };
+  // Commented out unused function
+  // const handleAddTeacher = async () => {
+  //   if (!classId || !classData.enrollmentCode) return;
+  //   
+  //   try {
+  //     // For testing purposes, add a hardcoded teacher
+  //     const success = await addMember(classData.enrollmentCode, {
+  //       name: 'Test Teacher',
+  //       email: 'teacher@example.com'
+  //     });
+  //     
+  //     if (success) {
+  //       console.log('Teacher added successfully!');
+  //       // Refresh the members list
+  //       window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+  //     }
+  //   } catch (err) {
+  //     console.error('Error adding teacher:', err);
+  //     setError('Failed to add teacher. Please try again.');
+  //   }
+  // };
   
-  // Load members from API
+  // Load members and enrollment requests from API
   useEffect(() => {
-    const loadMembers = async () => {
+    const loadMembersAndRequests = async () => {
       if (!classId) return;
       
       setIsLoading(true);
@@ -80,27 +88,40 @@ export default function PeoplePage() {
           status: 'approved' as const // Teachers are always approved
         })) as Teacher[];
         
-        // For students, separate by enrollment status
-        const allStudents = members.filter(m => m.role === 'Student') as Student[];
+        // Get approved students
+        const approvedStudentsList = members.filter(m => m.role === 'Student') as Student[];
+        console.log('Approved students:', approvedStudentsList);
         
-        // Debug output
-        console.log('All students before separation:', allStudents);
+        // For teachers, also fetch pending enrollment requests
+        let pendingStudentsList: Student[] = [];
         
-        // Explicitly check for status - if none exists, default to pending for new students
-        const pendingStudentsList = allStudents.filter(s => s.status === 'pending' || !s.status);
-        const approvedStudentsList = allStudents.filter(s => s.status === 'approved');
+        if (isTeacher) {
+          try {
+            console.log('Fetching pending enrollment requests for class ID:', classId);
+            const pendingRequests = await getPendingEnrollmentRequests(classId);
+            console.log('Pending enrollment requests:', pendingRequests);
+            
+            // Map enrollment requests to student format
+            pendingStudentsList = pendingRequests.map((req: any) => ({
+              id: req.id,
+              userId: req.userId || req.user?.id || req.email,
+              name: req.name || req.user?.name || 'Unknown',
+              email: req.email || req.user?.email || 'unknown@example.com',
+              role: 'Student' as const,
+              status: 'pending' as const,
+              requestDate: req.requestDate || new Date().toISOString(),
+              requestId: req.id // Store the request ID for approval/rejection
+            }));
+          } catch (reqErr) {
+            console.error('Error fetching enrollment requests:', reqErr);
+            // Non-fatal error, continue with empty pending list
+          }
+        }
         
-        console.log('Pending students after separation:', pendingStudentsList);
-        console.log('Approved students after separation:', approvedStudentsList);
-        
-        // For any student without a status, set a default of 'pending'
-        const normalizedPendingStudents = pendingStudentsList.map(student => ({
-          ...student,
-          status: 'pending' as const
-        }));
+        console.log('Pending students from enrollment requests:', pendingStudentsList);
         
         setTeachers(teachersList);
-        setPendingStudents(normalizedPendingStudents);
+        setPendingStudents(pendingStudentsList);
         setStudents(approvedStudentsList);
       } catch (err: any) {
         console.error('Error loading members:', err);
@@ -110,15 +131,15 @@ export default function PeoplePage() {
       }
     };
     
-    loadMembers();
+    loadMembersAndRequests();
     
     // Add an event listener for when the course members are updated
-    window.addEventListener('courseMembersUpdated', loadMembers);
+    window.addEventListener('courseMembersUpdated', loadMembersAndRequests);
     
     return () => {
-      window.removeEventListener('courseMembersUpdated', loadMembers);
+      window.removeEventListener('courseMembersUpdated', loadMembersAndRequests);
     };
-  }, [classId]);
+  }, [classId, isTeacher]);
   
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -160,38 +181,43 @@ export default function PeoplePage() {
   };
 
   // Handle approving a pending student
-  const handleApproveStudent = async (userId: string) => {
+  const handleApproveStudent = async (studentId: string) => {
     if (!classId) return;
     
     try {
-      const success = await approveStudentEnrollment(classId, userId);
+      // Find the student to get their request ID
+      const student = pendingStudents.find(s => s.userId === studentId);
+      
+      if (!student || !student.requestId) {
+        console.error(`No request ID found for student ${studentId}`);
+        setError('Failed to approve student: No enrollment request found.');
+        return;
+      }
+      
+      console.log(`Processing enrollment request with ID: ${student.requestId} for approval`);
+      const success = await processEnrollmentRequest(student.requestId, 'approve');
       
       if (success) {
-        // Find the approved student
-        const approvedStudent = pendingStudents.find(student => student.userId === userId);
+        // Update local state to move the student from pending to approved
+        setPendingStudents(prev => prev.filter(s => s.userId !== studentId));
         
-        if (approvedStudent) {
-          // Update local state to move the student from pending to approved
-          setPendingStudents(prev => prev.filter(student => student.userId !== userId));
-          
-          // Add to approved students with updated status
-          const updatedStudent = { ...approvedStudent, status: 'approved' as const };
-          setStudents(prev => [...prev, updatedStudent]);
-          
-          // Show success message
-          setError(null);
-          // Use a styled success message
-          const successDiv = document.createElement('div');
-          successDiv.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
-          successDiv.style.zIndex = '9999';
-          successDiv.innerHTML = `<strong>Success!</strong> ${approvedStudent.name} has been approved and can now access the class.`;
-          document.body.appendChild(successDiv);
-          setTimeout(() => {
-            successDiv.remove();
-          }, 3000);
-        }
+        // Add to approved students with updated status
+        const updatedStudent = { ...student, status: 'approved' as const };
+        setStudents(prev => [...prev, updatedStudent]);
         
-        console.log(`Student ${userId} approved successfully`);
+        // Show success message
+        setError(null);
+        // Use a styled success message
+        const successDiv = document.createElement('div');
+        successDiv.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
+        successDiv.style.zIndex = '9999';
+        successDiv.innerHTML = `<strong>Success!</strong> ${student.name} has been approved and can now access the class.`;
+        document.body.appendChild(successDiv);
+        setTimeout(() => {
+          successDiv.remove();
+        }, 3000);
+        
+        console.log(`Student ${studentId} approved successfully`);
       }
     } catch (err) {
       console.error('Error approving student:', err);
@@ -200,33 +226,37 @@ export default function PeoplePage() {
   };
 
   // Handle rejecting a pending student
-  const handleRejectStudent = async (userId: string) => {
+  const handleRejectStudent = async (studentId: string) => {
     if (!classId) return;
     
     try {
-      // Find student name before removal
-      const student = pendingStudents.find(s => s.userId === userId);
-      const studentName = student?.name || 'Student';
+      // Find the student to get their request ID
+      const student = pendingStudents.find(s => s.userId === studentId);
       
-      const success = await rejectStudentEnrollment(classId, userId);
+      if (!student || !student.requestId) {
+        console.error(`No request ID found for student ${studentId}`);
+        setError('Failed to reject student: No enrollment request found.');
+        return;
+      }
+      
+      console.log(`Processing enrollment request with ID: ${student.requestId} for rejection`);
+      const success = await processEnrollmentRequest(student.requestId, 'reject');
       
       if (success) {
-        // Update local state to remove the student from pending
-        setPendingStudents(prev => prev.filter(student => student.userId !== userId));
+        // Remove from pending students list
+        setPendingStudents(prev => prev.filter(s => s.userId !== studentId));
         
         // Show success message
-        setError(null);
-        // Use a styled success message
         const successDiv = document.createElement('div');
         successDiv.className = 'fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded';
         successDiv.style.zIndex = '9999';
-        successDiv.innerHTML = `<strong>Rejected:</strong> ${studentName} has been removed from enrollment requests.`;
+        successDiv.innerHTML = `<strong>Student Rejected</strong> The student will need to request access again with a new enrollment code.`;
         document.body.appendChild(successDiv);
         setTimeout(() => {
           successDiv.remove();
         }, 3000);
         
-        console.log(`Student ${userId} rejected successfully`);
+        console.log(`Student ${studentId} rejected successfully`);
       }
     } catch (err) {
       console.error('Error rejecting student:', err);
@@ -487,14 +517,6 @@ export default function PeoplePage() {
                   <UserPlus size={20} className="text-[#1a73e8]" />
                 </button>
               )}
-              {!isTeacher && (
-                <JoinClassButton 
-                  className="text-sm px-3 py-1.5" 
-                  onSuccess={() => {
-                    window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
-                  }}
-                />
-              )}
             </div>
           </div>
           
@@ -590,12 +612,6 @@ export default function PeoplePage() {
                     Add Student
                   </button>
                 )}
-                <JoinClassButton 
-                  onSuccess={() => {
-                    // Trigger a refresh of the members list
-                    window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
-                  }}
-                />
               </div>
             </div>
           )}
