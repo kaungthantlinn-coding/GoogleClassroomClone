@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getApiBaseUrl } from '../utils/apiMode';
+import { extractFileId } from '../utils/idUtils';
 
 const API_URL = getApiBaseUrl();
 
@@ -131,23 +132,88 @@ export const uploadSubmissionFiles = async (
 
 /**
  * Download a submission file
+ * @param submissionId The ID of the submission
  * @param fileId The ID of the file to download
  * @param fileName The name to save the file as
  */
-export const downloadSubmissionFile = async (fileId: string | number, fileName: string): Promise<void> => {
+export const downloadSubmissionFile = async (submissionId: string | number, fileId: string | number, fileName: string): Promise<void> => {
   try {
-    console.log(`Downloading file ${fileId} as ${fileName}`);
+    // Extract numeric parts for cleaner IDs - match how we handle IDs in the upload function
+    const cleanSubmissionId = typeof submissionId === 'string' ? extractFileId(submissionId) : submissionId;
+    const cleanFileId = typeof fileId === 'string' ? extractFileId(fileId) : fileId;
     
-    // Make the download request with blob response type
-    const response = await fileUploadApi.get(`/submissions/files/${fileId}`, {
-      responseType: 'blob',
-    });
+    // This might be encoded in the fileId (e.g., "1055-filename.pdf")
+    // If so, the API might be expecting just "1055" as the ID
+    console.log(`Attempting to download file ${fileName}`);
+    console.log(`Submission ID: ${cleanSubmissionId}, File ID: ${cleanFileId}`);
     
-    // Check content type to ensure correct handling
+    // Create an array of download approaches to try
+    const downloadApproaches = [
+      // Approach 1: Direct file download with file ID + query param for submission (matches upload pattern)
+      async () => {
+        console.log(`Trying direct file download with query params`);
+        return await fileUploadApi.get(`/files/download/${cleanFileId}`, {
+          params: { submissionId: cleanSubmissionId },
+          responseType: 'blob'
+        });
+      },
+      
+      // Approach 2: Through submission endpoint
+      async () => {
+        console.log(`Trying through submission endpoint`);
+        return await fileUploadApi.get(`/submissions/download`, {
+          params: { submissionId: cleanSubmissionId, fileId: cleanFileId },
+          responseType: 'blob'
+        });
+      },
+      
+      // Approach 3: Base64 encoded file ID
+      async () => {
+        // For files that might have special characters in their IDs
+        const encodedFileId = encodeURIComponent(cleanFileId.toString());
+        console.log(`Trying with encoded file ID: ${encodedFileId}`);
+        return await fileUploadApi.get(`/submissions/${cleanSubmissionId}/files/${encodedFileId}`, {
+          responseType: 'blob'
+        });
+      },
+      
+      // Approach 4: Standard REST path-based approach
+      async () => {
+        console.log(`Trying standard REST path`);
+        return await fileUploadApi.get(`/submissions/${cleanSubmissionId}/files/${cleanFileId}`, {
+          responseType: 'blob'
+        });
+      }
+    ];
+    
+    // Try each approach until one works
+    let response = null;
+    let lastError = null;
+    
+    for (const approach of downloadApproaches) {
+      try {
+        response = await approach();
+        if (response && response.status === 200) {
+          console.log('Download successful!');
+          break;
+        }
+      } catch (error: any) {
+        console.log('Download approach failed:', error?.message || 'Unknown error');
+        lastError = error;
+      }
+    }
+    
+    // If no approach was successful, throw the last error
+    if (!response) {
+      console.error('All download approaches failed');
+      throw lastError || new Error('Failed to download file');
+    }
+    
+    // Process successful download
     const contentType = response.headers['content-type'];
-    console.log(`Downloaded file content type: ${contentType}`);
+    console.log(`Downloaded file type: ${contentType}`);
     
-    // Create blob URL and trigger download
+    // Create blob URL and trigger browser download
     const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
     const link = document.createElement('a');
     link.href = url;

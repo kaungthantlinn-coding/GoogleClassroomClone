@@ -480,8 +480,9 @@ export const enrollCourseByCode = async (enrollmentCode: string): Promise<void> 
     console.log(`Enrolling in course with enrollment code: ${enrollmentCode}`);
     
     // Call the API to enroll with the code
-    // POST: api/courses/enroll-by-code/{code}
-    await courseApi.post(`/enroll-by-code/${enrollmentCode}`);
+    // POST: api/courses/enroll-by-code
+    // Send the enrollment code in the request body
+    await courseApi.post('/enroll-by-code', { enrollmentCode });
     
     console.log('Successfully enrolled in course');
   } catch (error: any) {

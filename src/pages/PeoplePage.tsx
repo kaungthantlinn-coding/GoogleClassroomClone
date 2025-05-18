@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useContext } from 'react';
 import { useParams } from 'react-router-dom';
-import { UserPlus, MoreVertical, Trash } from 'lucide-react';
+import { UserPlus, MoreVertical, Trash, Check, X } from 'lucide-react';
 import { useStudentData } from '../contexts/StudentDataContext';
 import AddStudentModal from '../components/AddStudentModal';
-import { getCourseMembers, Member, removeMember, addMember } from '../api/membersApi';
+import { getCourseMembers, Member, removeMember, addMember, approveStudentEnrollment, rejectStudentEnrollment } from '../api/membersApi';
 import { ClassDataContext } from './ClassPage';
 import { useAuthStore } from '../stores/useAuthStore';
+import JoinClassButton from '../components/JoinClassButton';
 
 interface Teacher extends Member {
   role: 'Teacher';
@@ -22,6 +23,7 @@ export default function PeoplePage() {
   
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [pendingStudents, setPendingStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -30,6 +32,10 @@ export default function PeoplePage() {
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
+  
+  // Get user role to determine if user is a teacher
+  const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role') || '';
+  const isTeacher = userRole.toLowerCase() === 'teacher';
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   
@@ -68,18 +74,37 @@ export default function PeoplePage() {
         const members = await getCourseMembers(classId);
         console.log('API response for members:', members);
         
-        // Separate members by role
-        const teachersList = members.filter(m => m.role === 'Teacher') as Teacher[];
-        const studentsList = members.filter(m => m.role === 'Student') as Student[];
+        // Separate members by role and ensure proper status
+        const teachersList = members.filter(m => m.role === 'Teacher').map(teacher => ({
+          ...teacher,
+          status: 'approved' as const // Teachers are always approved
+        })) as Teacher[];
         
-        console.log('Filtered teachers:', teachersList);
-        console.log('Filtered students:', studentsList);
+        // For students, separate by enrollment status
+        const allStudents = members.filter(m => m.role === 'Student') as Student[];
+        
+        // Debug output
+        console.log('All students before separation:', allStudents);
+        
+        // Explicitly check for status - if none exists, default to pending for new students
+        const pendingStudentsList = allStudents.filter(s => s.status === 'pending' || !s.status);
+        const approvedStudentsList = allStudents.filter(s => s.status === 'approved');
+        
+        console.log('Pending students after separation:', pendingStudentsList);
+        console.log('Approved students after separation:', approvedStudentsList);
+        
+        // For any student without a status, set a default of 'pending'
+        const normalizedPendingStudents = pendingStudentsList.map(student => ({
+          ...student,
+          status: 'pending' as const
+        }));
         
         setTeachers(teachersList);
-        setStudents(studentsList);
-      } catch (err) {
-        console.error('Error loading course members:', err);
-        setError('Failed to load course members. Please try again.');
+        setPendingStudents(normalizedPendingStudents);
+        setStudents(approvedStudentsList);
+      } catch (err: any) {
+        console.error('Error loading members:', err);
+        setError(err.message || 'Failed to load class members');
       } finally {
         setIsLoading(false);
       }
@@ -87,15 +112,11 @@ export default function PeoplePage() {
     
     loadMembers();
     
-    // Listen for updates to refresh the list
-    const handleMembersUpdated = () => {
-      loadMembers();
-    };
-    
-    window.addEventListener('courseMembersUpdated', handleMembersUpdated);
+    // Add an event listener for when the course members are updated
+    window.addEventListener('courseMembersUpdated', loadMembers);
     
     return () => {
-      window.removeEventListener('courseMembersUpdated', handleMembersUpdated);
+      window.removeEventListener('courseMembersUpdated', loadMembers);
     };
   }, [classId]);
   
@@ -135,6 +156,81 @@ export default function PeoplePage() {
     } finally {
       setDeleteModalVisible(false);
       setStudentToDelete(null);
+    }
+  };
+
+  // Handle approving a pending student
+  const handleApproveStudent = async (userId: string) => {
+    if (!classId) return;
+    
+    try {
+      const success = await approveStudentEnrollment(classId, userId);
+      
+      if (success) {
+        // Find the approved student
+        const approvedStudent = pendingStudents.find(student => student.userId === userId);
+        
+        if (approvedStudent) {
+          // Update local state to move the student from pending to approved
+          setPendingStudents(prev => prev.filter(student => student.userId !== userId));
+          
+          // Add to approved students with updated status
+          const updatedStudent = { ...approvedStudent, status: 'approved' as const };
+          setStudents(prev => [...prev, updatedStudent]);
+          
+          // Show success message
+          setError(null);
+          // Use a styled success message
+          const successDiv = document.createElement('div');
+          successDiv.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
+          successDiv.style.zIndex = '9999';
+          successDiv.innerHTML = `<strong>Success!</strong> ${approvedStudent.name} has been approved and can now access the class.`;
+          document.body.appendChild(successDiv);
+          setTimeout(() => {
+            successDiv.remove();
+          }, 3000);
+        }
+        
+        console.log(`Student ${userId} approved successfully`);
+      }
+    } catch (err) {
+      console.error('Error approving student:', err);
+      setError('Failed to approve student. Please try again.');
+    }
+  };
+
+  // Handle rejecting a pending student
+  const handleRejectStudent = async (userId: string) => {
+    if (!classId) return;
+    
+    try {
+      // Find student name before removal
+      const student = pendingStudents.find(s => s.userId === userId);
+      const studentName = student?.name || 'Student';
+      
+      const success = await rejectStudentEnrollment(classId, userId);
+      
+      if (success) {
+        // Update local state to remove the student from pending
+        setPendingStudents(prev => prev.filter(student => student.userId !== userId));
+        
+        // Show success message
+        setError(null);
+        // Use a styled success message
+        const successDiv = document.createElement('div');
+        successDiv.className = 'fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded';
+        successDiv.style.zIndex = '9999';
+        successDiv.innerHTML = `<strong>Rejected:</strong> ${studentName} has been removed from enrollment requests.`;
+        document.body.appendChild(successDiv);
+        setTimeout(() => {
+          successDiv.remove();
+        }, 3000);
+        
+        console.log(`Student ${userId} rejected successfully`);
+      }
+    } catch (err) {
+      console.error('Error rejecting student:', err);
+      setError('Failed to reject student. Please try again.');
     }
   };
 
@@ -247,12 +343,14 @@ export default function PeoplePage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[32px] font-normal text-[#3c4043]">Teachers</h2>
-            <button 
-              className="p-2 hover:bg-[#f8f9fa] rounded-full"
-              onClick={openAddTeacherModal}
-            >
-              <UserPlus size={20} className="text-[#1a73e8]" />
-            </button>
+            {isTeacher && (
+              <button 
+                className="p-2 hover:bg-[#f8f9fa] rounded-full"
+                onClick={openAddTeacherModal}
+              >
+                <UserPlus size={20} className="text-[#1a73e8]" />
+              </button>
+            )}
           </div>
           
           {isLoading ? (
@@ -304,16 +402,100 @@ export default function PeoplePage() {
           )}
         </div>
 
+        {/* Pending Students Section - Only visible to teachers */}
+        {isTeacher && pendingStudents.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[32px] font-normal text-[#3c4043]">Pending Approvals</h2>
+              <div className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                {pendingStudents.length} {pendingStudents.length === 1 ? 'student' : 'students'} awaiting approval
+              </div>
+            </div>
+            
+            <div className="space-y-2 bg-white rounded-lg border border-gray-200">
+              {pendingStudents.map((student) => (
+                <div
+                  key={student.id}
+                  className="flex items-center justify-between gap-4 p-4 hover:bg-[#f8f9fa] border-b border-gray-100 last:border-b-0"
+                >
+                  <div className="flex items-center gap-4">
+                    {student.avatar ? (
+                      <img
+                        src={student.avatar}
+                        alt={student.name}
+                        className="w-10 h-10 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-white text-[15px]">
+                        {student.name[0]}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-[14px] text-[#3c4043] font-medium">{student.name}</div>
+                      <div className="text-[12px] text-[#5f6368]">{student.email}</div>
+                      <div className="text-[12px] text-yellow-600 mt-1 flex items-center">
+                        <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                        Requested to join on {new Date().toLocaleDateString()}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">ID: {student.userId}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        console.log(`Approving student with userId: ${student.userId}`);
+                        handleApproveStudent(student.userId);
+                      }}
+                      className="px-3 py-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors flex items-center gap-1 font-medium"
+                      title="Approve"
+                    >
+                      <Check size={16} />
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log(`Rejecting student with userId: ${student.userId}`);
+                        handleRejectStudent(student.userId);
+                      }}
+                      className="px-3 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors flex items-center gap-1 font-medium"
+                      title="Reject"
+                    >
+                      <X size={16} />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-700">
+              <p><strong>Note:</strong> Students will gain access to class materials only after you approve them. Rejected students will need to request access again with a new enrollment code.</p>
+            </div>
+          </div>
+        )}
+
         {/* Students Section */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[32px] font-normal text-[#3c4043]">Students</h2>
-            <button 
-              className="p-2 hover:bg-[#f8f9fa] rounded-full"
-              onClick={openAddStudentModal}
-            >
-              <UserPlus size={20} className="text-[#1a73e8]" />
-            </button>
+            <div className="flex items-center gap-2">
+              {isTeacher && (
+                <button 
+                  className="p-2 hover:bg-[#f8f9fa] rounded-full"
+                  onClick={openAddStudentModal}
+                >
+                  <UserPlus size={20} className="text-[#1a73e8]" />
+                </button>
+              )}
+              {!isTeacher && (
+                <JoinClassButton 
+                  className="text-sm px-3 py-1.5" 
+                  onSuccess={() => {
+                    window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+                  }}
+                />
+              )}
+            </div>
           </div>
           
           {isLoading ? (
@@ -352,6 +534,12 @@ export default function PeoplePage() {
                     <div>
                       <div className="text-[14px] text-[#3c4043]">{student.name}</div>
                       <div className="text-[12px] text-[#5f6368]">{student.email}</div>
+                      {student.status === 'approved' && (
+                        <div className="text-[12px] text-green-600 mt-1 flex items-center">
+                          <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                          Approved
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -392,12 +580,23 @@ export default function PeoplePage() {
             <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
               <EmptyStateIllustration />
               <p className="text-[#5f6368] mt-4">No students in this class yet</p>
-              <button 
-                className="mt-4 px-4 py-2 bg-[#1a73e8] text-white rounded-md hover:bg-[#1765c6] transition-colors"
-                onClick={openAddStudentModal}
-              >
-                Add Student
-              </button>
+              <div className="mt-4 flex flex-wrap justify-center gap-4">
+                {isTeacher && (
+                  <button 
+                    className="px-4 py-2 bg-[#1a73e8] text-white rounded-md hover:bg-[#1765c6] transition-colors flex items-center gap-2"
+                    onClick={openAddStudentModal}
+                  >
+                    <UserPlus size={18} />
+                    Add Student
+                  </button>
+                )}
+                <JoinClassButton 
+                  onSuccess={() => {
+                    // Trigger a refresh of the members list
+                    window.dispatchEvent(new CustomEvent('courseMembersUpdated'));
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>

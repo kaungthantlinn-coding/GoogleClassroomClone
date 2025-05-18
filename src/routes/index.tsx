@@ -13,6 +13,7 @@ import SubmissionsPage from '../pages/SubmissionsPage';
 import StudentSubmissionPage from '../pages/StudentSubmissionPage';
 import StudentAssignmentSubmitPage from '../pages/StudentAssignmentSubmitPage';
 import GradesPage from '../pages/GradesPage';
+import NotificationsPage from '../pages/NotificationsPage';
 import LoginPage from '../pages/LoginPage';
 import SignupPage from '../pages/SignupPage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: 'archived', element: <ArchivedPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'to-review', element: <ToReviewPage /> },
+      { path: 'notifications', element: <NotificationsPage /> },
 
       // Class context routes
       { path: 'class/:classId', element: <ClassPage /> },

@@ -1,3 +1,15 @@
+// Message event handler (MUST be during initial script evaluation)
+self.addEventListener('message', (event) => {
+  try {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+      self.skipWaiting();
+    }
+  } catch (error) {
+    // Silently handle any errors that might occur during message processing
+    console.debug('Error in service worker message handler:', error);
+  }
+});
+
 const CACHE_NAME = 'bolt-cache-v1';
 const STATIC_ASSETS = [
   '/',
@@ -33,18 +45,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-});
-
-// Message event handler (added during initial evaluation)
-self.addEventListener('message', (event) => {
-  try {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-      self.skipWaiting();
-    }
-  } catch (error) {
-    // Silently handle any errors that might occur during message processing
-    console.debug('Error in service worker message handler:', error);
-  }
 });
 
 // Add a global error handler for the service worker

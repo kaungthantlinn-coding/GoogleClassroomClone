@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { Menu, Plus, Grid, Calendar, ChevronRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useQueryClient } from '@tanstack/react-query';
 import ClassActionDialog from './ClassActionDialog';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const user = useAuthStore((state) => state.user);
-  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [dialogType, setDialogType] = useState<'join' | 'create'>('join');
   const [showAddDropdown, setShowAddDropdown] = useState(false);
@@ -193,6 +192,7 @@ export default function Navbar() {
           <button className="p-2 hover:bg-gray-100 rounded-full" aria-label="Google apps">
             <Grid size={24} strokeWidth={1.5} className="text-[#5f6368]" />
           </button>
+          <NotificationBell />
           <div className="relative">
             <button
               onClick={() => {

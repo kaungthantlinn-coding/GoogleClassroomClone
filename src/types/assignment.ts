@@ -217,3 +217,21 @@ export const getUpcomingAssignments = async (classId: string): Promise<Assignmen
     return [];
   }
 };
+
+// Get all calendar assignments
+export const getCalendarAssignments = async (): Promise<Assignment[]> => {
+  try {
+    const assignments = await assignmentApi.getCalendarAssignments();
+    
+    // Add status to each assignment
+    const assignmentsWithStatus = assignments.map(assignment => ({
+      ...assignment,
+      status: calculateAssignmentStatus(assignment)
+    }));
+    
+    return assignmentsWithStatus;
+  } catch (error) {
+    console.error('Error getting calendar assignments:', error);
+    return [];
+  }
+};

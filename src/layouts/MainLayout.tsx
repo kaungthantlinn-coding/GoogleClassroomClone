@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
+import { NotificationProvider } from '../contexts/NotificationContext';
 
-// Breakpoint values for responsive design
 const BREAKPOINTS = {
   sm: 640,  // Small devices
   md: 768,  // Medium devices
@@ -30,7 +30,7 @@ export default function MainLayout() {
       }
     };
     
-    // Check screen size on mount
+
     checkScreenSize();
     
     // Add event listeners
@@ -45,34 +45,34 @@ export default function MainLayout() {
   }, [isSidebarOpen]);
 
   return (
-    <div className="min-h-screen bg-[#f9f9f9]">
-      <Navbar />
-      <div className="flex">
-        {/* On mobile, don't reserve space for sidebar as it will be floating */}
-        {!isMobile && (
-          <div 
-            className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
-            style={{ minHeight: '100vh' }}
+    <NotificationProvider>
+      <div className="min-h-screen bg-[#f9f9f9]">
+        <Navbar />
+        <div className="flex">
+          {!isMobile && (
+            <div 
+              className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
+              style={{ minHeight: '100vh' }}
+            >
+              {/* Sidebar component */}
+            </div>
+          )}
+          
+          {/* Sidebar component */}
+          <Sidebar isCollapsed={!isSidebarOpen} />
+          
+          {/* Main content */}
+          <main 
+            className="flex-1 p-4 sm:p-6" 
+            style={{ 
+              paddingTop: '64px',
+              paddingLeft: isMobile ? 'calc(1rem + 8px)' : undefined
+            }}
           >
-            {/* This div just reserves space for the fixed sidebar */}
-          </div>
-        )}
-        
-        {/* Sidebar component */}
-        <Sidebar isCollapsed={!isSidebarOpen} />
-        
-        {/* Main content */}
-        <main 
-          className="flex-1 p-4 sm:p-6" 
-          style={{ 
-            paddingTop: '64px',
-            // Add left padding on mobile to ensure content isn't hidden when sidebar opens
-            paddingLeft: isMobile ? 'calc(1rem + 8px)' : undefined
-          }}
-        >
-          <Outlet />
-        </main>
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </NotificationProvider>
   );
 }

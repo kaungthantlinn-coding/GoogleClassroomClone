@@ -1,10 +1,10 @@
 import axios, { InternalAxiosRequestConfig, AxiosError } from 'axios';
 import { Announcement, CommentInput, Comment } from '../types/announcement';
 
-// The base URL should include /api as a prefix for all endpoints
+
 const API_URL = 'http://localhost:5203/api';
 
-// Log the API URL during initialization
+
 console.log(`Announcement API initialized with base URL: ${API_URL}`);
 
 // Cache for debouncing identical requests
@@ -42,7 +42,7 @@ const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestC
 
 announcementApi.interceptors.request.use(addAuthToken);
 
-// Add response interceptor to handle rate limiting and log responses
+
 announcementApi.interceptors.response.use(
   response => {
     // Log successful responses
@@ -55,14 +55,14 @@ announcementApi.interceptors.response.use(
     const url = error.config?.url;
     const method = error.config?.method?.toUpperCase();
     
-    // Log failed responses
+
     console.error(`API Error (${statusCode}): ${method} ${url}`, error.response?.data || error.message);
     
     // Handle rate limiting (429 Too Many Requests)
     if (statusCode === 429) {
       console.warn('Rate limit exceeded. Implementing exponential backoff.');
       
-      // Get retry-after header or default to 2 seconds
+      
       const retryAfter = parseInt(error.response?.headers['retry-after'] || '2', 10);
       
       // Wait for the specified time
@@ -98,7 +98,7 @@ const handleApiError = (error: any, defaultMessage: string) => {
   throw new Error(defaultMessage);
 };
 
-// Helper function for caching GET requests
+
 const cachedGet = async <T>(url: string, params?: any): Promise<T> => {
   const cacheKey = `${url}:${JSON.stringify(params || {})}`;
   const now = Date.now();

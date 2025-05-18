@@ -8,6 +8,7 @@ import { unsubmitAssignment, submitAssignment } from '../api/assignmentApi';
 import * as storageApi from '../api/storageApi';
 import axios, { AxiosProgressEvent } from 'axios';
 import FileUpload from '../components/FileUpload';
+// We're using custom events for local notifications instead of direct signalR
 
 interface AssignmentDetails {
   id: string;
@@ -301,6 +302,58 @@ const StudentAssignmentSubmitPage: React.FC = () => {
       }
       
       console.log('Processed file info for display:', fileInfo);
+      
+      // Create a notification for teachers about this submission
+      try {
+        // Only create the notification if we have valid assignment data and are in a course context
+        if (assignment && classId) {
+          // Create a client-side notification without attempting the API call
+          // This simulates what would happen if the server sent a notification
+          const notificationData = {
+            notificationId: `notification-${Date.now()}`,
+            title: 'New Submission',
+            message: `${userName} submitted assignment '${assignment.title}'`,
+            type: 'submission',
+            courseId: classId,
+            assignmentId: assignmentId,
+            userId: userId,
+            createdAt: new Date().toISOString(),
+            isRead: false,
+            data: {},
+            link: `/class/${classId}/submissions/${assignmentId}`
+          };
+          
+          // Store in localStorage to persist across sessions and tabs
+          // In production, the server would handle notifications via SignalR
+          // This is just for testing/demo purposes until the backend is implemented
+          window.setTimeout(() => {
+            console.log('Broadcasting notification:', notificationData);
+            
+            // First dispatch event for the current session
+            document.dispatchEvent(new CustomEvent('manual-notification', { detail: notificationData }));
+            
+            // Then store in localStorage for other sessions to find
+            try {
+              // Get existing notifications
+              const storedNotifications = JSON.parse(localStorage.getItem('classroom-notifications') || '[]');
+              
+              // Add the new notification
+              storedNotifications.unshift(notificationData);
+              
+              // Store back in localStorage (limit to 50 notifications to prevent storage issues)
+              localStorage.setItem('classroom-notifications', 
+                JSON.stringify(storedNotifications.slice(0, 50)));
+                
+              console.log('Notification saved to localStorage for cross-session access');
+            } catch (error) {
+              console.error('Error saving notification to localStorage:', error);
+            }
+          }, 500);
+        }
+      } catch (notificationError) {
+        console.error('Error creating notification:', notificationError);
+        // Don't fail the submission just because notification failed
+      }
       
       // Show success state immediately
       setSuccess(true);
