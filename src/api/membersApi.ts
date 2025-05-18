@@ -16,6 +16,7 @@ export interface Member {
   avatar?: string;
   finalGrade?: string;
   finalGradeColor?: string;
+  status?: 'pending' | 'approved' | 'rejected';
 }
 
 // Get all members of a course
@@ -128,6 +129,56 @@ export const addMember = async (
     return true;
   } catch (error) {
     console.error('Error adding member:', error);
+    return false;
+  }
+};
+
+// Approve a student's enrollment request
+export const approveStudentEnrollment = async (courseId: string, userId: string): Promise<boolean> => {
+  try {
+    const token = getAuthToken();
+    
+    const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/members/${userId}/approve`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('Error response body:', await response.text());
+      throw new Error(`Failed to approve student enrollment: ${response.status}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error approving student enrollment:', error);
+    return false;
+  }
+};
+
+// Reject a student's enrollment request
+export const rejectStudentEnrollment = async (courseId: string, userId: string): Promise<boolean> => {
+  try {
+    const token = getAuthToken();
+    
+    const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/members/${userId}/reject`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('Error response body:', await response.text());
+      throw new Error(`Failed to reject student enrollment: ${response.status}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error rejecting student enrollment:', error);
     return false;
   }
 }; 
