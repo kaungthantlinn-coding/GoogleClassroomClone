@@ -82,7 +82,7 @@ const handleApiError = (error: any, defaultMessage: string) => {
     }
   }
   // Default error
-  console.error(defaultMessage, error);
+  console.error('Auth API Error:', defaultMessage, error);
   throw new Error(defaultMessage);
 };
 

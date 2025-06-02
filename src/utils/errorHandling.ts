@@ -27,6 +27,20 @@ const IGNORED_ERROR_PATTERNS = [
   'sentry.io',
   'Failed to fetch',
 
+  // React DOM errors (common in development)
+  'removeChild',
+  'The node to be removed is not a child of this node',
+  'createRoot() on a container that has already been passed',
+
+  // SignalR expected errors
+  'POST http://localhost:5203/hubs/notifications/negotiate 401',
+  '401 (Unauthorized)',
+
+  // Assignment API permission errors (expected for students)
+  'assignments/1033/submissions',
+  '403 (Forbidden)',
+  'Error getting assignment submissions',
+
   // Other common browser extension errors
   'extension',
   'chrome-extension',

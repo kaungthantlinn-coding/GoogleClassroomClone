@@ -1,12 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../contexts/NotificationContext';
 import { BellRing } from 'lucide-react';
+import { useAuthStore } from '../stores/useAuthStore';
 
 const NotificationBell: React.FC = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
   const navigate = useNavigate();
+  const user = useAuthStore(state => state.user);
+  
+  // Debug log notifications status
+  useEffect(() => {
+    if (user) {
+      console.log('NotificationBell: User role =', user.role);
+      console.log('NotificationBell: Notification count =', notifications.length);
+      console.log('NotificationBell: Unread count =', unreadCount);
+      console.log('NotificationBell: All notifications =', notifications);
+      if (notifications.length > 0) {
+        console.log('NotificationBell: First notification =', notifications[0]);
+      }
+    }
+  }, [notifications, unreadCount, user]);
+
+  // Force re-render when notifications change
+  useEffect(() => {
+    setForceUpdate(prev => prev + 1);
+  }, [notifications.length, unreadCount]);
 
   const handleNotificationClick = (notificationId: string, link?: string, courseId?: string, assignmentId?: string) => {
     markAsRead(notificationId);
@@ -52,7 +73,16 @@ const NotificationBell: React.FC = () => {
       >
         <BellRing size={24} strokeWidth={1.5} className="text-[#5f6368]" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full">
+          <span
+            key={`badge-${unreadCount}-${forceUpdate}`}
+            className="notification-bell-badge absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full"
+            style={{
+              minWidth: '18px',
+              minHeight: '18px',
+              zIndex: 10,
+              display: 'flex'
+            }}
+          >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Authentication Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .credentials {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SignalR Authentication Test</h1>
+        <p>This page tests the SignalR authentication fix for the Google Classroom Clone application.</p>
+        
+        <div class="credentials">
+            <h3>Test Credentials</h3>
+            <p><strong>Email:</strong> test.teacher@example.com</p>
+            <p><strong>Password:</strong> password123</p>
+            <p><strong>Role:</strong> Teacher</p>
+        </div>
+
+        <div class="test-section info">
+            <h3>Instructions</h3>
+            <ol>
+                <li>Make sure the main application is running on <a href="http://localhost:3005" target="_blank">http://localhost:3005</a></li>
+                <li>Click "Test Authentication Status" to check current login state</li>
+                <li>If not logged in, click "Open Login Page" and login with the test credentials above</li>
+                <li>After logging in, click "Test SignalR Connection" to verify the fix</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Controls</h3>
+            <button onclick="checkAuthStatus()">Test Authentication Status</button>
+            <button onclick="openLoginPage()">Open Login Page</button>
+            <button onclick="testSignalRConnection()">Test SignalR Connection</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Results</h3>
+            <div id="log" class="log">Click a test button to start...</div>
+        </div>
+    </div>
+
+    <script>
+        const APP_URL = 'http://localhost:3005';
+        
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logMessage;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        function openLoginPage() {
+            log('Opening login page in new tab...');
+            window.open(`${APP_URL}/login`, '_blank');
+        }
+
+        async function checkAuthStatus() {
+            log('=== Checking Authentication Status ===');
+            
+            try {
+                // Check if we can access the app's localStorage/sessionStorage
+                // This will only work if this page is served from the same origin
+                // or if we use postMessage to communicate with the app
+                
+                log('Note: This test page cannot directly access the app\'s storage due to CORS.');
+                log('Please open the browser console on the main app page and run:');
+                log('sessionStorage.getItem("auth_token")');
+                log('');
+                log('Or use the browser\'s Application/Storage tab to check:');
+                log('- sessionStorage: auth_token');
+                log('- localStorage: user_role');
+                
+            } catch (error) {
+                log(`Error checking auth status: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSignalRConnection() {
+            log('=== Testing SignalR Connection ===');
+            
+            try {
+                log('Note: SignalR connection test must be run from the main app page.');
+                log('Please open the browser console on the main app page and run:');
+                log('');
+                log('// Check if SignalR service is available');
+                log('if (window.signalRService) {');
+                log('  console.log("SignalR service found");');
+                log('  window.signalRService.debugAuthStatus();');
+                log('  window.signalRService.startConnection().then(connected => {');
+                log('    console.log("Connection result:", connected);');
+                log('  });');
+                log('} else {');
+                log('  console.log("SignalR service not found");');
+                log('}');
+                log('');
+                log('Expected result: Connection should succeed without authentication errors.');
+                
+            } catch (error) {
+                log(`Error testing SignalR: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run initial check
+        log('SignalR Authentication Test Page Loaded');
+        log('Main app should be running at: ' + APP_URL);
+        log('Click "Test Authentication Status" to begin testing.');
+    </script>
+</body>
+</html>

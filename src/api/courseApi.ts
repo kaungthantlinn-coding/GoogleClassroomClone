@@ -35,11 +35,8 @@ const courseApi = axios.create({
   timeout: 10000 // Add a timeout to prevent hanging requests
 });
 
-// Default auth token that works with the API
-const DEFAULT_TEACHER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA0IiwiZW1haWwiOiJ0ZWFjaGVyMUBnbWFpbC5jb20iLCJqdGkiOiIwYmZhYjBiZi1kZWY0LTQyNWMtYTA2YS1kNDFiNDJmYzUxNGUiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoidGVhY2hlciIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlRlYWNoZXIiLCJleHAiOjE3NDYzNjE4ODgsImlzcyI6IkNsYXNzcm9vbUFQSSIsImF1ZCI6IkNsYXNzcm9vbUNsaWVudCJ9._-a-uyMdr3VMBEnRWDfjLCq_bfvQnOmCL4jApTiZH-4';
-
-// Default student token
-const DEFAULT_STUDENT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDA1IiwiZW1haWwiOiJzdHVkZW50MUBnbWFpbC5jb20iLCJqdGkiOiIxYmZhYjBiZi1kZWY0LTQyNWMtYTA2YS1kNDFiNDJmYzUxNGUiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoic3R1ZGVudCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlN0dWRlbnQiLCJleHAiOjE3NDYzNjE4ODgsImlzcyI6IkNsYXNzcm9vbUFQSSIsImF1ZCI6IkNsYXNzcm9vbUNsaWVudCJ9.Hs4xwjJXG9F_xT0jcI_bSX1PJ_d3hV9RsGZ4piOvCFc';
+// Note: Default tokens removed - users must be properly authenticated
+// If you need default tokens for development, get fresh ones from your backend
 
 // Add token to requests if available
 const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
@@ -64,21 +61,10 @@ const addAuthToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestC
   const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
   const isStudent = userRole?.toLowerCase() === 'student';
   
-  // For development purposes, if no token exists, use the appropriate default token based on role
+  // If no token exists, user must be authenticated first
   if (!token) {
-    // Use student token if role is specified as student, otherwise use teacher token
-    token = isStudent ? DEFAULT_STUDENT_TOKEN : DEFAULT_TEACHER_TOKEN;
-    console.warn(`Using default ${isStudent ? 'student' : 'teacher'} auth token. In production, this should be a user-specific token.`);
-    
-    // Store it in sessionStorage for future requests
-    try {
-      sessionStorage.setItem('auth_token', token);
-      
-      // Also store in localStorage for persistence
-      localStorage.setItem('auth_token', token);
-    } catch (e) {
-      console.error('Failed to store token in storage:', e);
-    }
+    console.error('No authentication token found. User must log in first.');
+    // Don't set any default tokens - require proper authentication
   }
   
   // Debug auth token
@@ -96,26 +82,17 @@ courseApi.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // If the error is 401 and we haven't already tried to refresh the token
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      // Get user role if available
-      const userRole = localStorage.getItem('user_role') || sessionStorage.getItem('user_role');
-      const isStudent = userRole?.toLowerCase() === 'student';
-      const defaultToken = isStudent ? DEFAULT_STUDENT_TOKEN : DEFAULT_TEACHER_TOKEN;
-      
-      console.log(`Refreshing token for role ${isStudent ? 'student' : 'teacher'}`);
-      
-      // Reset the token to the appropriate default token
-      sessionStorage.setItem('auth_token', defaultToken);
-      localStorage.setItem('auth_token', defaultToken);
-      
-      // Update the Authorization header with the default token
-      originalRequest.headers.Authorization = `Bearer ${defaultToken}`;
-      
-      // Retry the original request with the new token
-      return courseApi(originalRequest);
+    // If the error is 401, clear tokens and require re-authentication
+    if (error.response?.status === 401) {
+      console.error('Authentication failed - clearing tokens and requiring login');
+
+      // Clear all tokens
+      sessionStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_token');
+      sessionStorage.removeItem('user_role');
+      localStorage.removeItem('user_role');
+
+      // Don't retry - let the error propagate so the app can handle re-authentication
     }
     
     return Promise.reject(error);
@@ -128,16 +105,14 @@ courseApi.interceptors.request.use(addAuthToken);
 const handleApiError = (error: any, defaultMessage: string) => {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError;
-    console.error('API Error:', {
+    console.error('Course API Error:', {
+      message: defaultMessage,
       status: axiosError.response?.status,
       statusText: axiosError.response?.statusText,
       data: axiosError.response?.data,
-      headers: axiosError.response?.headers,
-      config: {
-        url: axiosError.config?.url,
-        method: axiosError.config?.method,
-        headers: axiosError.config?.headers
-      }
+      url: axiosError.config?.url,
+      method: axiosError.config?.method,
+      fullUrl: `${axiosError.config?.baseURL}${axiosError.config?.url}`
     });
     
     if (axiosError.response) {

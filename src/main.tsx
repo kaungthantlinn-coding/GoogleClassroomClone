@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from 'react';
+import React, { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
@@ -8,6 +8,10 @@ import { router } from './routes';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { setupErrorHandlers } from './utils/errorHandling';
 import { StudentDataProvider } from './contexts/StudentDataContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import { useAuthStore } from './stores/useAuthStore';
+import RoleToggle from './components/RoleToggle';
+import NotificationTester from './components/NotificationTester';
 
 // Set up global error handlers before rendering the app
 setupErrorHandlers();
@@ -41,18 +45,56 @@ const preloadCriticalImages = () => {
 // Run preloading
 preloadCriticalImages();
 
-const root = createRoot(document.getElementById('root')!);
+// Auth initialization component
+const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const loadUser = useAuthStore(state => state.loadUser);
+
+  useEffect(() => {
+    // Load authenticated user on app startup
+    loadUser();
+  }, [loadUser]);
+
+  return <>{children}</>;
+};
+
+// App component
+const App: React.FC = () => {
+  return (
+    <>
+      <RouterProvider router={router} />
+      <RoleToggle />
+      <NotificationTester />
+    </>
+  );
+};
+
+// Ensure we only create the root once
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+// Check if root is already created (for hot reload scenarios)
+let root: any;
+if (!(rootElement as any)._reactRootContainer) {
+  root = createRoot(rootElement);
+  (rootElement as any)._reactRootContainer = root;
+} else {
+  root = (rootElement as any)._reactRootContainer;
+}
 
 root.render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <StudentDataProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-        </ErrorBoundary>
-      </StudentDataProvider>
-    </QueryClientProvider>
-  </StrictMode>
+  <QueryClientProvider client={queryClient}>
+    <AuthInitializer>
+      <NotificationProvider>
+        <StudentDataProvider>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </StudentDataProvider>
+      </NotificationProvider>
+    </AuthInitializer>
+  </QueryClientProvider>
 );
 
 // Service worker management

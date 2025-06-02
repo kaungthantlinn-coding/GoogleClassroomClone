@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import { NotificationProvider } from '../contexts/NotificationContext';
 
 const BREAKPOINTS = {
   sm: 640,  // Small devices
@@ -45,34 +44,34 @@ export default function MainLayout() {
   }, [isSidebarOpen]);
 
   return (
-    <NotificationProvider>
-      <div className="min-h-screen bg-[#f9f9f9]">
-        <Navbar />
-        <div className="flex">
-          {!isMobile && (
-            <div 
-              className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
-              style={{ minHeight: '100vh' }}
-            >
-              {/* Sidebar component */}
-            </div>
-          )}
-          
-          {/* Sidebar component */}
-          <Sidebar isCollapsed={!isSidebarOpen} />
-          
-          {/* Main content */}
-          <main 
-            className="flex-1 p-4 sm:p-6" 
-            style={{ 
-              paddingTop: '64px',
-              paddingLeft: isMobile ? 'calc(1rem + 8px)' : undefined
-            }}
+    <div className="min-h-screen bg-[#f9f9f9]">
+      <Navbar />
+      <div className="flex">
+        {!isMobile && (
+          <div
+            className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
+            style={{ minHeight: '100vh' }}
           >
-            <Outlet />
-          </main>
-        </div>
+            {/* Sidebar component */}
+          </div>
+        )}
+
+        {/* Sidebar component */}
+        <Sidebar isCollapsed={!isSidebarOpen} />
+
+        {/* Main content */}
+        <main
+          className="flex-1 p-4 sm:p-6"
+          style={{
+            paddingTop: '64px',
+            paddingLeft: isMobile ? 'calc(1rem + 8px)' : undefined
+          }}
+        >
+          <Outlet />
+        </main>
       </div>
-    </NotificationProvider>
+
+
+    </div>
   );
 }

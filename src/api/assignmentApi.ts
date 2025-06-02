@@ -177,35 +177,67 @@ export const getSubmissions = async (assignmentId: string | number): Promise<any
 };
 
 /**
+ * Get student's own submissions for an assignment (student only)
+ * GET: api/assignments/{assignmentId}/my-submissions
+ */
+export const getMySubmissions = async (assignmentId: string | number): Promise<any[]> => {
+  try {
+    const response = await assignmentApi.get(`/assignments/${assignmentId}/my-submissions`);
+    console.log('API response for my submissions:', response.data);
+    return response.data;
+  } catch (error) {
+    // If the my-submissions endpoint doesn't exist, try the general endpoint
+    // Some APIs might allow students to see their own submissions through the general endpoint
+    try {
+      const response = await assignmentApi.get(`/assignments/${assignmentId}/submissions`);
+      console.log('API response for submissions (fallback):', response.data);
+      return response.data;
+    } catch (fallbackError) {
+      return handleApiError(error, 'Error getting my assignment submissions');
+    }
+  }
+};
+
+/**
  * Find the most recent submission for a student
  * This is a helper function that doesn't try to delete anything
  */
 const findStudentSubmission = async (assignmentId: string | number, studentId: string | number): Promise<any | null> => {
   try {
     console.log(`Finding latest submission for student ${studentId} on assignment ${assignmentId}`);
-    
+
     try {
-      // First try to get all submissions
-      const submissions = await getSubmissions(assignmentId);
-      
+      // Try to get student's own submissions first (for students)
+      // This avoids the 403 error when students try to access all submissions
+      let submissions;
+      try {
+        submissions = await getMySubmissions(assignmentId);
+        console.log('Successfully retrieved my submissions');
+      } catch (mySubmissionsError) {
+        console.log('My submissions endpoint failed, trying general submissions endpoint');
+        // Fallback to general submissions (for teachers or if my-submissions doesn't exist)
+        submissions = await getSubmissions(assignmentId);
+        console.log('Successfully retrieved general submissions');
+      }
+
       // Find all submissions for this student
       const studentSubmissions = submissions.filter(sub => {
         const subStudentId = sub.userId || sub.studentId;
         return subStudentId?.toString() === studentId?.toString();
       });
-      
+
       if (studentSubmissions.length === 0) {
         console.log('No existing submissions found for this student');
         return null;
       }
-      
+
       // Sort by date (newest first)
       const sortedSubmissions = studentSubmissions.sort((a, b) => {
         const dateA = new Date(a.submittedAt || a.submittedDate || 0).getTime();
         const dateB = new Date(b.submittedAt || b.submittedDate || 0).getTime();
         return dateB - dateA;
       });
-      
+
       // Return the most recent submission
       console.log(`Found ${studentSubmissions.length} submissions, using the most recent one`);
       return sortedSubmissions[0];
@@ -231,7 +263,15 @@ export const submitAssignment = async (assignmentId: string | number, submission
     // This helps prevent duplicate submissions and ensures complete replacement of files
     try {
       console.log('Checking for existing submissions...');
-      const existingSubmissions = await getSubmissions(assignmentId);
+      // Use getMySubmissions to avoid 403 errors for students
+      let existingSubmissions;
+      try {
+        existingSubmissions = await getMySubmissions(assignmentId);
+        console.log('Retrieved my submissions successfully');
+      } catch (mySubmissionsError) {
+        console.log('My submissions failed, trying general submissions');
+        existingSubmissions = await getSubmissions(assignmentId);
+      }
       const studentId = submission.studentId || submission.userId;
       
       if (existingSubmissions && Array.isArray(existingSubmissions)) {
@@ -718,6 +758,7 @@ export default {
   updateAssignment,
   deleteAssignment,
   getSubmissions,
+  getMySubmissions,
   getSubmission,
   submitAssignment,
   gradeSubmission,
